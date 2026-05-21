@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vimax_lite.cli import main
-from vimax_lite.manual_workflow import build_manual_prompt, image_counts, prepare_manual_image_workflow
+from vimax_lite.manual_workflow import build_character_reference_sheet, build_manual_prompt, image_counts, prepare_manual_image_workflow
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
 
@@ -125,6 +125,29 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("primary character design reference", prompt)
         self.assertIn("Image 1", prompt)
         self.assertIn("previous generated shot", prompt)
+
+    def test_character_reference_prompt_is_english_for_mock_design(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "雨の中でロボットが音楽を聞く",
+                    "--provider",
+                    "mock",
+                ]
+            )
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            references = build_character_reference_sheet(design)
+            prompt = references["characters"][0]["prompts"][0]["prompt"]
+            self.assertIn("Create one consistent character reference image", prompt)
+            self.assertIn("small white delivery robot", prompt)
+            self.assertIn("yellow rain poncho", prompt)
+            self.assertNotIn("配達ロボット", prompt)
 
 
 if __name__ == "__main__":

@@ -271,12 +271,12 @@ def _mock_payload(name: str, prompt: str) -> dict:
                 {
                     "id": "char_robot",
                     "name": "Milo",
-                    "role": "配達ロボットの主人公",
-                    "personality": "慎重で観察力があり、静かに勇敢",
-                    "appearance": "白い小型配達ロボット。四角いスクリーン顔と青いステータスライトを持つ。",
-                    "wardrobe": "貨物シェルに固定された黄色いレインポンチョ",
-                    "voice": "柔らかい電子チャイム",
-                    "continuity_notes": ["青いステータスライトを常に見せる", "黄色いポンチョは濡れたまま"],
+                    "role": "the main character, a lonely delivery robot",
+                    "personality": "careful, observant, quietly brave, and curious",
+                    "appearance": "a small white delivery robot with a square screen face, rounded cargo shell, compact wheels, and a glowing blue status light",
+                    "wardrobe": "a yellow rain poncho clipped to the cargo shell, wet from the rain",
+                    "voice": "soft electronic chimes",
+                    "continuity_notes": ["always show the glowing blue status light", "keep the yellow rain poncho wet and attached to the cargo shell"],
                 }
             ]
         }

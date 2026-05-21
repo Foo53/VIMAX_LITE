@@ -63,6 +63,8 @@ class CharacterAgent(Agent):
         prompt = f"""
 あなたはキャラクター設計エージェントです。
 映像生成で一貫性を保つため、キャラクターID、外見、服装、声、継続性メモを明確にしてください。
+参照画像生成でそのまま使えるように、appearance、wardrobe、continuity_notes は英語で書いてください。
+入力が日本語の場合も、意味を保ったまま視覚的に明確な英語へ変換してください。
 
 RAG参照情報:
 {context}

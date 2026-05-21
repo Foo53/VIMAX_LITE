@@ -71,6 +71,29 @@ class JobStore:
 jobs = JobStore()
 
 
+AUDIENCE_OPTIONS = [
+    {"value": "general", "label": "一般視聴者"},
+    {"value": "children", "label": "子ども向け"},
+    {"value": "young_adults", "label": "若年層・SNS向け"},
+    {"value": "film_fans", "label": "映画好き・映像表現重視"},
+    {"value": "tech_portfolio", "label": "採用担当・技術ポートフォリオ向け"},
+]
+
+
+MODEL_OPTIONS = [
+    {"value": "mock-fixed", "label": "Mock 固定応答（APIなし）", "provider": "mock"},
+    {"value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash", "provider": "gemini"},
+    {"value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro", "provider": "gemini"},
+    {"value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash", "provider": "gemini"},
+    {"value": "claude-sonnet-4.5", "label": "Claude Sonnet 4.5（将来対応枠）", "provider": "claude"},
+    {"value": "openai-gpt-5.1", "label": "OpenAI GPT-5.1（将来対応枠）", "provider": "openai"},
+    {"value": "minimax-m2.7", "label": "MiniMax M2.7（将来対応枠）", "provider": "minimax"},
+]
+
+
+DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 180, 300]
+
+
 def create_app(output_root: Path = Path("outputs")) -> FastAPI:
     app = FastAPI(title="ViMax Lite Web UI")
     templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -80,7 +103,16 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def home(request: Request) -> HTMLResponse:
         projects = sorted(path.name for path in output_root.iterdir() if (path / "design.json").exists())
-        return templates.TemplateResponse(request, "home.html", {"projects": projects})
+        return templates.TemplateResponse(
+            request,
+            "home.html",
+            {
+                "projects": projects,
+                "audience_options": AUDIENCE_OPTIONS,
+                "model_options": MODEL_OPTIONS,
+                "duration_presets": DURATION_PRESETS,
+            },
+        )
 
     @app.post("/projects/generate")
     def generate_project(

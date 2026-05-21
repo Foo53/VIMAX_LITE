@@ -29,12 +29,24 @@ def build_character_reference_sheet(design: ProductionDesign) -> dict[str, Any]:
     characters: list[dict[str, Any]] = []
     for character in design.characters:
         prompts = []
+        role = english_or_fallback(character.role, "main character in the project")
+        appearance = english_or_fallback(character.appearance, "use a clear, distinctive, production-ready character design based on the project concept")
+        wardrobe = english_or_fallback(character.wardrobe, "keep the character's established costume, exterior materials, colors, and accessories consistent")
+        personality = english_or_fallback(character.personality, "express the character's personality through posture, silhouette, and subtle facial or body cues")
+        continuity_notes = english_list_or_fallback(
+            character.continuity_notes,
+            "maintain the same identity, silhouette, proportions, colors, costume, and material details across every reference view",
+        )
         base_prompt = (
-            f"Create a consistent character reference image for {character.name}. "
-            f"Role: {character.role}. Appearance: {character.appearance}. "
-            f"Wardrobe or exterior: {character.wardrobe}. Personality: {character.personality}. "
-            f"Continuity rules: {'; '.join(character.continuity_notes)}. "
-            "Clean neutral background, clear full body, production reference sheet style, no scene action."
+            f"Create one consistent character reference image for {character.name}. "
+            f"Role: {role}. "
+            f"Appearance: {appearance}. "
+            f"Wardrobe or exterior: {wardrobe}. "
+            f"Personality cue: {personality}. "
+            f"Continuity rules: {'; '.join(continuity_notes)}. "
+            "Use a clean neutral background, full-body production reference sheet style, clear readable silhouette, "
+            "consistent colors and materials, no scene action, no caption, no logo, no visible text. "
+            "If any source metadata was non-English, interpret its meaning internally as precise visual English guidance."
         )
         for pose in REFERENCE_POSES:
             prompts.append(
@@ -52,6 +64,26 @@ def build_character_reference_sheet(design: ProductionDesign) -> dict[str, Any]:
         "instruction": "最初にこの参照画像を作成し、以降のショット生成では必ず添付してください。",
         "characters": characters,
     }
+
+
+def english_or_fallback(text: str, fallback: str) -> str:
+    cleaned = " ".join((text or "").split())
+    if cleaned and is_english_prompt_text(cleaned):
+        return cleaned
+    return fallback
+
+
+def english_list_or_fallback(values: list[str], fallback: str) -> list[str]:
+    english_values = [english_or_fallback(value, "") for value in values]
+    english_values = [value for value in english_values if value]
+    return english_values or [fallback]
+
+
+def is_english_prompt_text(text: str) -> bool:
+    if not text:
+        return False
+    ascii_chars = sum(1 for char in text if ord(char) < 128)
+    return ascii_chars / max(len(text), 1) >= 0.9
 
 
 def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> dict[str, Any]:

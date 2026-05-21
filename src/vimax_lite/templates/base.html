@@ -29,7 +29,12 @@
     textarea { min-height: 120px; resize: vertical; }
     button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 6px; padding: 10px 14px; background: var(--accent); color: white; text-decoration: none; font-weight: 700; cursor: pointer; }
     .button.secondary { background: #334155; }
+    .button.ghost { background: #e2e8f0; color: var(--text); }
     .muted { color: var(--muted); }
+    .help { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+    .inline-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .preset-row button { padding: 7px 10px; font-size: 13px; }
     .stat { border-left: 4px solid var(--accent); padding-left: 12px; }
     .progress { height: 14px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
     .progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }

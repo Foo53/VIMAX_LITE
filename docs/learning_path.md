@@ -39,3 +39,11 @@ Image Generation Agent を読みます。テキストのショット設計から
 ## Phase 10: 本家 ViMax との差分理解
 
 `docs/vimax_lite_vs_vimax.md` を読みます。現在の実装が本家 ViMax のどの部分を再現していて、どこが未実装なのかを説明できるようにします。特に、Reference Image Selector、Best Image Selector、camera tree、動画生成の違いを理解すると、今後の拡張方針をポートフォリオとして話しやすくなります。
+
+## Phase 11: Remotion による動画組み立て
+
+`docs/remotion_video_assembly_plan.md` を読みます。生成済み画像、字幕、読み上げ音声、タイムライン manifest を組み合わせて、動画生成APIなしで MP4 を作る設計を学びます。ここでは、Remotion を動画生成AIではなく、最終編集・レンダリングレイヤーとして扱う考え方を身につけます。
+
+## Phase 12: 将来の動画生成API対応
+
+Remotion で作った `timeline_manifest.json` を境界にして、Veo、Runway、Pika、Luma などの動画生成 provider を後から追加できる構成を学びます。重要なのは、画像連結動画と本物の動画生成を競合させるのではなく、Remotion を最終合成レイヤーとして残すことです。

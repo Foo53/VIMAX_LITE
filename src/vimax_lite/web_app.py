@@ -94,6 +94,12 @@ MODEL_OPTIONS = [
 DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 180, 300]
 
 
+OUTPUT_MODE_OPTIONS = [
+    {"value": "standard", "label": "標準: 動画生成API向け設計"},
+    {"value": "remotion", "label": "Remotion: 画像連結 + 字幕 + 読み上げ向け"},
+]
+
+
 def create_app(output_root: Path = Path("outputs")) -> FastAPI:
     app = FastAPI(title="ViMax Lite Web UI")
     templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -111,6 +117,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 "audience_options": AUDIENCE_OPTIONS,
                 "model_options": MODEL_OPTIONS,
                 "duration_presets": DURATION_PRESETS,
+                "output_mode_options": OUTPUT_MODE_OPTIONS,
             },
         )
 
@@ -121,6 +128,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         audience: str = Form("general"),
         style: str = Form("cinematic"),
         duration_seconds: int = Form(60),
+        output_mode: str = Form("standard"),
         provider: str = Form("mock"),
         model: str = Form("gemini-2.5-flash"),
     ) -> RedirectResponse:
@@ -134,6 +142,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 "audience": audience,
                 "style": style,
                 "duration_seconds": duration_seconds,
+                "output_mode": output_mode,
                 "provider_name": provider,
                 "model": model,
                 "output_root": output_root,
@@ -224,6 +233,7 @@ def _run_generation_job(
     audience: str,
     style: str,
     duration_seconds: int,
+    output_mode: str,
     provider_name: str,
     model: str,
     output_root: Path,
@@ -243,6 +253,7 @@ def _run_generation_job(
             audience=audience,
             style=style,
             duration_seconds=duration_seconds,
+            output_mode=output_mode,
             generate_images=False,
             image_model="gemini-2.5-flash-image",
             progress=progress,

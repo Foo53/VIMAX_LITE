@@ -42,7 +42,7 @@ Image Generation Agent を読みます。テキストのショット設計から
 
 ## Phase 11: Remotion による動画組み立て
 
-`docs/remotion_video_assembly_plan.md` を読みます。生成済み画像、字幕、読み上げ音声、タイムライン manifest を組み合わせて、動画生成APIなしで MP4 を作る設計を学びます。ここでは、Remotion を動画生成AIではなく、最終編集・レンダリングレイヤーとして扱う考え方を身につけます。
+`docs/remotion_video_assembly_plan.md` を読みます。生成済み画像、字幕、読み上げ音声、タイムライン manifest を組み合わせて、動画生成APIなしで MP4 を作る設計を学びます。ここでは、Remotion を動画生成AIではなく、最終編集・レンダリングレイヤーとして扱う考え方を身につけます。Web UI または CLI の `--output-mode remotion` を使うと、Remotion に適した脚本、ショット、編集指示が生成されます。
 
 ## Phase 12: 将来の動画生成API対応
 

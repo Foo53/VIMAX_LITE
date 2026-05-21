@@ -19,21 +19,25 @@ class Agent:
 class IdeationAgent(Agent):
     name = "企画整理エージェント"
 
-    def run(self, user_input: str, *, audience: str, style: str, duration_seconds: int) -> ProductionBrief:
+    def run(self, user_input: str, *, audience: str, style: str, duration_seconds: int, output_mode: str = "standard") -> ProductionBrief:
+        mode_instruction = output_mode_instruction(output_mode)
         prompt = f"""
 あなたはViMax風の動画制作ワークフローにおける企画整理エージェントです。
 ユーザーの入力を、短編映像の制作設計に使えるProductionBriefへ変換してください。
 出力は必ず指定されたJSON Schemaに従ってください。
+{mode_instruction}
 
 USER_INPUT: {user_input}
 想定視聴者: {audience}
 映像スタイル: {style}
 想定尺: {duration_seconds}秒
+OUTPUT_MODE: {output_mode}
 """
         brief = self.provider.generate_structured(prompt, ProductionBrief)
         brief.audience = brief.audience or audience
         brief.style = brief.style or style
         brief.duration_seconds = duration_seconds
+        brief.output_mode = output_mode if output_mode in {"standard", "remotion"} else "standard"
         return brief
 
 
@@ -41,10 +45,12 @@ class ScreenwriterAgent(Agent):
     name = "脚本エージェント"
 
     def run(self, brief: ProductionBrief, source_script: str | None = None) -> ScriptList:
+        mode_instruction = output_mode_instruction(brief.output_mode)
         prompt = f"""
 あなたは脚本エージェントです。
 短編映像向けに3から7個のビートを作ってください。
 既存脚本がある場合は、主要な出来事を保ちながら映像向けに整理してください。
+{mode_instruction}
 
 制作ブリーフ:
 {brief.model_dump_json(indent=2)}
@@ -110,10 +116,12 @@ class ShotDirectorAgent(Agent):
 
     def run(self, brief: ProductionBrief, scenes: SceneList, characters: CharacterList, rag: RAGStore) -> ShotList:
         context = rag.context_block(" ".join(scene.summary for scene in scenes.items), used_by=self.name, limit=8)
+        mode_instruction = output_mode_instruction(brief.output_mode)
         prompt = f"""
 あなたはショット設計エージェントです。
 各シーンをショット単位に分け、カメラ、レンズ、動き、first frame、last frame、照明、音を具体化してください。
 RAG参照情報に含まれるキャラクターや世界観の一貫性を必ず守ってください。
+{mode_instruction}
 
 RAG参照情報:
 {context}
@@ -138,12 +146,14 @@ class PromptEngineerAgent(Agent):
 
     def run(self, brief: ProductionBrief, shots: ShotList, rag: RAGStore) -> PromptBundle:
         context = rag.context_block(" ".join(shot.description for shot in shots.items), used_by=self.name, limit=10)
+        mode_instruction = output_mode_instruction(brief.output_mode)
         prompt = f"""
 あなたはプロンプト設計エージェントです。
 ショット設計から、画像生成プロンプトと動画生成プロンプトを作成してください。
 画像プロンプトは視覚要素を具体的に、動画プロンプトは時間変化とカメラ移動を具体的に書いてください。
 画像生成モデルでの安定性を高めるため、image_prompts.prompt と image_prompts.negative_prompt は英語で書いてください。
 入力情報が日本語の場合も、意味を保ったまま英語の画像生成プロンプトに変換してください。
+{mode_instruction}
 
 RAG参照情報:
 {context}
@@ -241,3 +251,20 @@ class ImageGenerationAgent(Agent):
             rag.add_image(image)
             generated.append(image)
         return generated
+
+
+def output_mode_instruction(output_mode: str) -> str:
+    if output_mode == "remotion":
+        return """
+出力モード: Remotion assembly.
+このモードではAI動画生成APIではなく、生成済み静止画をRemotionで順番につなげ、字幕と読み上げ音声を重ねる前提で設計してください。
+- 脚本ビートは、字幕やナレーションに変換しやすい短い出来事単位にしてください。
+- ショットは1枚絵として成立し、ゆるいズーム、パン、フェードだけでも意味が伝わる構図にしてください。
+- motion は激しいアクションではなく、Remotionで再現しやすい slow zoom, slow pan, crossfade, hold, parallax などを中心にしてください。
+- audio には読み上げナレーション、環境音、短い効果音の方針を含めてください。
+- video_prompts は動画生成API向けではなく、Remotionでの編集指示、字幕候補、ナレーション候補、ショット秒数の意図が分かる内容にしてください。
+"""
+    return """
+出力モード: Standard video-generation prep.
+動画生成APIへ渡す前段の制作設計として、first frame / last frame、時間変化、カメラ移動を具体化してください。
+"""

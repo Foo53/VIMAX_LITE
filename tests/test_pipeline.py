@@ -149,6 +149,28 @@ class PipelineTest(unittest.TestCase):
             self.assertIn("yellow rain poncho", prompt)
             self.assertNotIn("配達ロボット", prompt)
 
+    def test_remotion_output_mode_shapes_design(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "雨の中でロボットが音楽を聞く",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "remotion",
+                ]
+            )
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            self.assertEqual(design.brief.output_mode, "remotion")
+            self.assertIn("Remotion", design.video_prompts[0].prompt)
+            self.assertIn("Remotionモード", "\n".join(design.learning_notes))
+
 
 if __name__ == "__main__":
     unittest.main()

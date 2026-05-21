@@ -127,11 +127,28 @@ Remotion や将来の動画生成APIが読む共通仕様です。
 ## CLI の拡張案
 
 ```bash
+vimax-lite idea2design --project portfolio-demo --idea "..." --output-mode remotion
 vimax-lite timeline --project portfolio-demo
 vimax-lite narrate --project portfolio-demo --provider mock
 vimax-lite tts --project portfolio-demo --provider local
 vimax-lite render-video --project portfolio-demo --renderer remotion
 ```
+
+### `--output-mode remotion`
+
+制作設計の段階から Remotion 用に寄せるモードです。
+
+通常モードでは、動画生成 API に渡すことを想定して first frame、last frame、時間変化、カメラ移動を細かく設計します。
+
+Remotion モードでは、生成済み静止画をつなげる前提になるため、次のように設計を変えます。
+
+- 1ショット1枚絵として意味が伝わる構図にする。
+- 字幕やナレーションに変換しやすい短い出来事単位で脚本を作る。
+- `motion` は slow zoom、slow pan、hold、crossfade など Remotion で再現しやすい動きに寄せる。
+- `audio` には読み上げナレーション、環境音、短い効果音の方針を含める。
+- `video_prompts` は動画生成 API 用ではなく、Remotion の編集指示、字幕候補、ナレーション候補、ショット秒数の意図が分かる内容にする。
+
+Web UI では「出力モード」から選択できます。
 
 ### `timeline`
 

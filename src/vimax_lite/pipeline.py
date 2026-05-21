@@ -40,8 +40,9 @@ def run_idea_pipeline(
     audience: str,
     style: str,
     duration_seconds: int,
-    generate_images: bool,
-    image_model: str,
+    output_mode: str = "standard",
+    generate_images: bool = False,
+    image_model: str = "gemini-2.5-flash-image",
     max_images: int | None = None,
     image_delay_seconds: float = 0.0,
     progress: ProgressCallback | None = None,
@@ -50,7 +51,7 @@ def run_idea_pipeline(
     init_project(paths)
     rag = RAGStore(paths.rag_store)
     _notify(progress, "brief", "企画整理エージェントで制作ブリーフを生成しています", 1, 9)
-    brief = IdeationAgent(provider).run(idea, audience=audience, style=style, duration_seconds=duration_seconds)
+    brief = IdeationAgent(provider).run(idea, audience=audience, style=style, duration_seconds=duration_seconds, output_mode=output_mode)
     return _run_common(brief, None, provider, rag, paths, generate_images, image_model, max_images, image_delay_seconds, progress)
 
 
@@ -63,8 +64,9 @@ def run_script_pipeline(
     audience: str,
     style: str,
     duration_seconds: int,
-    generate_images: bool,
-    image_model: str,
+    output_mode: str = "standard",
+    generate_images: bool = False,
+    image_model: str = "gemini-2.5-flash-image",
     max_images: int | None = None,
     image_delay_seconds: float = 0.0,
     progress: ProgressCallback | None = None,
@@ -73,7 +75,7 @@ def run_script_pipeline(
     init_project(paths)
     rag = RAGStore(paths.rag_store)
     _notify(progress, "brief", "企画整理エージェントで制作ブリーフを生成しています", 1, 9)
-    brief = IdeationAgent(provider).run(script, audience=audience, style=style, duration_seconds=duration_seconds)
+    brief = IdeationAgent(provider).run(script, audience=audience, style=style, duration_seconds=duration_seconds, output_mode=output_mode)
     return _run_common(brief, script, provider, rag, paths, generate_images, image_model, max_images, image_delay_seconds, progress)
 
 
@@ -153,7 +155,7 @@ def _run_common(
         image_prompts=prompts.image_prompts,
         video_prompts=prompts.video_prompts,
         rag_trace=rag.trace,
-        learning_notes=_learning_notes(generate_images=generate_images),
+        learning_notes=_learning_notes(generate_images=generate_images, output_mode=brief.output_mode),
     )
     _notify(progress, "critic", "継続性評価エージェントで矛盾を確認しています", 8, 9)
     report = ContinuityCriticAgent(provider).run(design, rag)
@@ -185,7 +187,7 @@ def _notify(progress: ProgressCallback | None, stage: str, message: str, current
         progress(stage, message, current, total)
 
 
-def _learning_notes(*, generate_images: bool) -> list[str]:
+def _learning_notes(*, generate_images: bool, output_mode: str = "standard") -> list[str]:
     notes = [
         "Gemini Provider: モデル呼び出しをProvider層に閉じ込め、将来の差し替えを容易にしています。",
         "構造化出力: 各エージェントの返答をPydanticで検証できるデータにしています。",
@@ -197,4 +199,6 @@ def _learning_notes(*, generate_images: bool) -> list[str]:
         notes.append("マルチモーダル生成: 画像プロンプトを画像生成Providerへ渡しました。")
     else:
         notes.append("マルチモーダル生成: 画像生成はスキップし、画像プロンプトだけを作成しました。")
+    if output_mode == "remotion":
+        notes.append("Remotionモード: 静止画を連結し、字幕と読み上げ音声を重ねる編集動画を作りやすい設計に寄せています。")
     return notes

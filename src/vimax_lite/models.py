@@ -17,6 +17,7 @@ class ProductionBrief(BaseModel):
     audience: str = Field(default="general", description="想定視聴者")
     style: str = Field(default="cinematic", description="映像スタイル")
     duration_seconds: int = Field(default=60, description="想定尺")
+    output_mode: Literal["standard", "remotion"] = Field(default="standard", description="出力モード")
     themes: list[str] = Field(default_factory=list, description="テーマ")
     visual_rules: list[str] = Field(default_factory=list, description="映像上の一貫性ルール")
     negative_constraints: list[str] = Field(default_factory=list, description="避けるべき表現")

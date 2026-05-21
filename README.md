@@ -38,6 +38,12 @@ vimax-lite idea2design --project portfolio-demo --idea "雨の東京路地で、
 vimax-lite inspect-rag --project portfolio-demo
 ```
 
+Remotionで画像連結動画を作る前提の制作設計にする場合:
+
+```bash
+vimax-lite idea2design --project portfolio-demo --idea "..." --provider mock --output-mode remotion
+```
+
 Web UIでアイデア入力から始める場合:
 
 ```bash

@@ -36,6 +36,7 @@ def render_design(design: ProductionDesign) -> str:
         f"- 想定視聴者: {design.brief.audience}",
         f"- 映像スタイル: {design.brief.style}",
         f"- 想定尺: {design.brief.duration_seconds}秒",
+        f"- 出力モード: {design.brief.output_mode}",
         f"- テーマ: {', '.join(design.brief.themes)}",
         "",
         "## キャラクター",

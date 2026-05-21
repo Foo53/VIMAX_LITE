@@ -231,6 +231,7 @@ def _idea_from_prompt(prompt: str) -> str:
 
 def _mock_payload(name: str, prompt: str) -> dict:
     idea = _idea_from_prompt(prompt)
+    is_remotion = "OUTPUT_MODE: remotion" in prompt or '"output_mode": "remotion"' in prompt or "Remotion assembly" in prompt
     if name == "ProductionBrief":
         return {
             "title": "Rain Alley Overture",
@@ -238,8 +239,10 @@ def _mock_payload(name: str, prompt: str) -> dict:
             "audience": "general",
             "style": "cinematic anime with grounded lighting",
             "duration_seconds": 60,
+            "output_mode": "remotion" if is_remotion else "standard",
             "themes": ["孤独", "好奇心", "創造性の目覚め"],
-            "visual_rules": ["雨の反射", "暖かいネオン", "ロボットのシルエットを固定"],
+            "visual_rules": ["雨の反射", "暖かいネオン", "ロボットのシルエットを固定"]
+            + (["各ショットは1枚絵として成立し、字幕とナレーションを載せやすい余白を残す"] if is_remotion else []),
             "negative_constraints": ["動画生成はしない", "キャラクターデザインを急に変えない"],
         }
     if name == "ScriptList":
@@ -315,6 +318,9 @@ def _mock_payload(name: str, prompt: str) -> dict:
         }
     if name == "PromptBundle":
         shots = _mock_payload("ShotList", prompt)["items"]
+        remotion_note = (
+            "Remotion assembly instruction: use this still as a 4-6 second scene with slow Ken Burns motion, readable subtitle space, narration-friendly pacing, and a soft crossfade to the next shot."
+        )
         return {
             "image_prompts": [
                 {
@@ -329,10 +335,14 @@ def _mock_payload(name: str, prompt: str) -> dict:
             "video_prompts": [
                 {
                     "shot_id": shot["shot_id"],
-                    "prompt": f"{shot['description']} Start: {shot['first_frame']} End: {shot['last_frame']}.",
+                    "prompt": f"{shot['description']} Start: {shot['first_frame']} End: {shot['last_frame']}. {remotion_note if is_remotion else ''}".strip(),
                     "duration_seconds": 5,
-                    "camera_motion": shot["motion"],
-                    "temporal_notes": "キャラクターの形状と濡れたポンチョを維持する。",
+                    "camera_motion": "slow zoom or slow pan for Remotion still-image assembly" if is_remotion else shot["motion"],
+                    "temporal_notes": (
+                        "Use the still image as a Remotion scene. Add a short Japanese caption, optional narration, ambient rain audio, and preserve character continuity across crossfades."
+                        if is_remotion
+                        else "キャラクターの形状と濡れたポンチョを維持する。"
+                    ),
                 }
                 for shot in shots
             ],

@@ -19,6 +19,13 @@
       <p class="help">視聴者を選ぶと、脚本の密度、言葉遣い、画面のテンポを調整しやすくなります。</p>
       <label>映像スタイル</label>
       <input name="style" value="cinematic">
+      <label>出力モード</label>
+      <select name="output_mode">
+        {% for option in output_mode_options %}
+          <option value="{{ option.value }}">{{ option.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="help">Remotionモードでは、静止画をつなげて字幕と読み上げ音声を付ける前提の脚本・ショット設計に寄せます。</p>
       <div class="inline-fields">
         <div>
           <label>想定尺（秒）</label>

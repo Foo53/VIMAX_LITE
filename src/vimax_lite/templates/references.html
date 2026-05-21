@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}参照画像 - {{ project }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1>キャラクター参照シート</h1>
+    <a class="button secondary" href="/projects/{{ project }}">戻る</a>
+    <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成へ</a>
+  </div>
+  <p class="muted">まずキャラクター参照画像をChatGPTで生成し、ここへアップロードします。以降のショットで添付参照として使います。</p>
+</section>
+{% for item in workflow.references.characters %}
+  <section class="panel">
+    <h2>{{ item.character.name }}</h2>
+    {% for prompt in item.prompts %}
+      <div class="panel">
+        <h3>{{ prompt.reference_id }}</h3>
+        <textarea class="copybox" readonly>{{ prompt.prompt }}</textarea>
+        <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/upload" enctype="multipart/form-data">
+          <label>生成画像をアップロード</label>
+          <input type="file" name="file" accept="image/*" required>
+          <p><button type="submit">保存</button></p>
+        </form>
+      </div>
+    {% endfor %}
+  </section>
+{% endfor %}
+{% endblock %}

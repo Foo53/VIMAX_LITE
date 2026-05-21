@@ -5,10 +5,14 @@ description = "Gemini-powered portfolio tool for AI video production design, RAG
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "fastapi>=0.115.0",
     "google-genai>=1.0.0",
+    "jinja2>=3.1.0",
     "pillow>=10.0.0",
     "pydantic>=2.6.0",
     "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.9",
+    "uvicorn>=0.30.0",
 ]
 
 [project.optional-dependencies]

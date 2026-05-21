@@ -36,6 +36,14 @@ vimax-lite idea2design --project portfolio-demo --idea "雨の東京路地で、
 vimax-lite inspect-rag --project portfolio-demo
 ```
 
+Web UIでアイデア入力から始める場合:
+
+```bash
+vimax-lite web --host 127.0.0.1 --port 8000
+```
+
+ブラウザで `http://127.0.0.1:8000` を開くと、アイデア入力、生成進捗、制作設計確認、参照画像シート、ショット画像生成キュー、画像アップロード、残り生成枚数の確認ができます。
+
 Gemini API を使う場合:
 
 ```bash
@@ -92,8 +100,22 @@ outputs/<project>/
   continuity_report.md
   rag_trace.md
   learning_notes.md
+  reference_plan.md
+  reference_plan.json
+  manual_generation_guide.md
   rag_store.json
+  references/
+    character_reference_sheet.md
+    character_reference_sheet.json
   images/
     image_manifest.json
     shot_001.png
+    manual/
+      <shot_id>.png
 ```
+
+## 本家 ViMax との差分
+
+現在の ViMax Lite は、本家 ViMax の動画生成パイプライン全体ではなく、動画生成直前までの制作設計、参照画像管理、RAG、学習用ワークフローに絞った実装です。
+
+詳しい差分は [docs/vimax_lite_vs_vimax.md](docs/vimax_lite_vs_vimax.md) にまとめています。

@@ -1,0 +1,205 @@
+from __future__ import annotations
+
+import json
+import shutil
+from pathlib import Path
+from typing import Any
+
+from vimax_lite.models import GeneratedImage, ProductionDesign, ProjectPaths
+from vimax_lite.renderers import write_image_manifest
+
+
+REFERENCE_POSES = ("front", "side", "back", "detail")
+
+
+def prepare_manual_image_workflow(project: str, output_root: Path = Path("outputs")) -> dict[str, Any]:
+    paths = ProjectPaths.for_project(project, output_root)
+    design = load_design(paths)
+    references = build_character_reference_sheet(design)
+    reference_plan = build_shot_reference_plan(design, paths)
+    write_reference_outputs(paths, references, reference_plan)
+    return {"references": references, "reference_plan": reference_plan}
+
+
+def load_design(paths: ProjectPaths) -> ProductionDesign:
+    return ProductionDesign.model_validate_json(paths.design_json.read_text(encoding="utf-8"))
+
+
+def build_character_reference_sheet(design: ProductionDesign) -> dict[str, Any]:
+    characters: list[dict[str, Any]] = []
+    for character in design.characters:
+        prompts = []
+        base_prompt = (
+            f"Create a consistent character reference image for {character.name}. "
+            f"Role: {character.role}. Appearance: {character.appearance}. "
+            f"Wardrobe or exterior: {character.wardrobe}. Personality: {character.personality}. "
+            f"Continuity rules: {'; '.join(character.continuity_notes)}. "
+            "Clean neutral background, clear full body, production reference sheet style, no scene action."
+        )
+        for pose in REFERENCE_POSES:
+            prompts.append(
+                {
+                    "reference_id": f"character_{character.id}_{pose}",
+                    "character_id": character.id,
+                    "pose": pose,
+                    "filename": f"character_{character.id}_{pose}.png",
+                    "prompt": f"{base_prompt} View: {pose}. Keep the exact same character design across all views.",
+                }
+            )
+        characters.append({"character": character.model_dump(), "prompts": prompts})
+    return {
+        "title": f"{design.brief.title} キャラクター参照シート",
+        "instruction": "最初にこの参照画像を作成し、以降のショット生成では必ず添付してください。",
+        "characters": characters,
+    }
+
+
+def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> dict[str, Any]:
+    scene_characters = {scene.scene_id: scene.characters for scene in design.scenes}
+    prompt_by_shot = {prompt.shot_id: prompt for prompt in design.image_prompts}
+    shots: list[dict[str, Any]] = []
+    previous_shot_file: str | None = None
+    for shot in sorted(design.shots, key=lambda item: item.order):
+        character_refs = []
+        for character_id in scene_characters.get(shot.scene_id, []):
+            character_refs.append(f"references/character_{character_id}_front.png")
+            character_refs.append(f"references/character_{character_id}_side.png")
+        required_refs = list(dict.fromkeys(character_refs))
+        if previous_shot_file:
+            required_refs.append(previous_shot_file)
+        image_prompt = prompt_by_shot.get(shot.shot_id)
+        manual_prompt = build_manual_prompt(shot.shot_id, image_prompt.prompt if image_prompt else shot.description, required_refs)
+        output_file = f"images/manual/{shot.shot_id}.png"
+        shots.append(
+            {
+                "shot_id": shot.shot_id,
+                "scene_id": shot.scene_id,
+                "order": shot.order,
+                "description": shot.description,
+                "required_references": required_refs,
+                "output_file": output_file,
+                "manual_prompt": manual_prompt,
+                "status": image_status(paths, shot.shot_id),
+            }
+        )
+        previous_shot_file = output_file
+    total = len(shots)
+    done = sum(1 for shot in shots if shot["status"] == "generated")
+    return {"total": total, "generated": done, "remaining": total - done, "shots": shots}
+
+
+def build_manual_prompt(shot_id: str, image_prompt: str, required_refs: list[str]) -> str:
+    refs = "\n".join(f"- {ref}" for ref in required_refs) if required_refs else "- なし"
+    return f"""次のショット画像を生成してください。
+
+ショットID: {shot_id}
+
+必ず添付する参照画像:
+{refs}
+
+生成方針:
+- 添付したキャラクター参照画像と同一キャラクターとして維持してください。
+- 直前ショット画像がある場合、空間、天候、光、キャラクター状態を自然につなげてください。
+- 新しいキャラクターデザインや別の世界観に変更しないでください。
+- 1枚の完成画像として生成してください。
+
+画像プロンプト:
+{image_prompt}
+"""
+
+
+def write_reference_outputs(paths: ProjectPaths, references: dict[str, Any], reference_plan: dict[str, Any]) -> None:
+    references_dir = paths.root / "references"
+    references_dir.mkdir(parents=True, exist_ok=True)
+    (references_dir / "character_reference_sheet.json").write_text(json.dumps(references, ensure_ascii=False, indent=2), encoding="utf-8")
+    (references_dir / "character_reference_sheet.md").write_text(render_character_reference_sheet(references), encoding="utf-8")
+    (paths.root / "reference_plan.json").write_text(json.dumps(reference_plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    (paths.root / "reference_plan.md").write_text(render_reference_plan(reference_plan), encoding="utf-8")
+    (paths.root / "manual_generation_guide.md").write_text(render_manual_generation_guide(references, reference_plan), encoding="utf-8")
+
+
+def render_character_reference_sheet(references: dict[str, Any]) -> str:
+    lines = [f"# {references['title']}", "", references["instruction"], ""]
+    for item in references["characters"]:
+        character = item["character"]
+        lines.extend([f"## {character['name']}", ""])
+        for prompt in item["prompts"]:
+            lines.extend([f"### {prompt['reference_id']}", f"保存名: `{prompt['filename']}`", "", prompt["prompt"], ""])
+    return "\n".join(lines)
+
+
+def render_reference_plan(reference_plan: dict[str, Any]) -> str:
+    lines = [
+        "# ショット参照画像計画",
+        "",
+        f"- 総ショット数: {reference_plan['total']}",
+        f"- 生成済み: {reference_plan['generated']}",
+        f"- 残り: {reference_plan['remaining']}",
+        "",
+    ]
+    for shot in reference_plan["shots"]:
+        refs = ", ".join(shot["required_references"]) if shot["required_references"] else "なし"
+        lines.extend([f"## {shot['shot_id']}", f"- 状態: {shot['status']}", f"- 添付参照画像: {refs}", f"- 保存先: `{shot['output_file']}`", ""])
+    return "\n".join(lines)
+
+
+def render_manual_generation_guide(references: dict[str, Any], reference_plan: dict[str, Any]) -> str:
+    lines = [
+        "# ChatGPT手作業画像生成ガイド",
+        "",
+        "## 1. キャラクター参照画像を先に生成",
+        "",
+        "以下の参照画像を生成し、Web UIからアップロードしてください。",
+        "",
+    ]
+    for item in references["characters"]:
+        for prompt in item["prompts"]:
+            lines.extend([f"### {prompt['reference_id']}", prompt["prompt"], ""])
+    lines.extend(["## 2. ショット画像を順番に生成", ""])
+    for shot in reference_plan["shots"]:
+        lines.extend([f"### {shot['shot_id']}", shot["manual_prompt"], f"保存先: `{shot['output_file']}`", ""])
+    return "\n".join(lines)
+
+
+def image_status(paths: ProjectPaths, image_id: str) -> str:
+    manual_path = paths.root / "images" / "manual" / f"{image_id}.png"
+    return "generated" if manual_path.exists() else "not_started"
+
+
+def image_counts(project: str, output_root: Path = Path("outputs")) -> dict[str, int]:
+    paths = ProjectPaths.for_project(project, output_root)
+    if not paths.design_json.exists():
+        return {"total": 0, "generated": 0, "remaining": 0}
+    design = load_design(paths)
+    total = len(design.image_prompts)
+    generated = sum(1 for prompt in design.image_prompts if image_status(paths, prompt.shot_id) == "generated")
+    return {"total": total, "generated": generated, "remaining": total - generated}
+
+
+def register_uploaded_image(project: str, image_id: str, source_path: Path, *, output_root: Path = Path("outputs"), kind: str = "shot") -> Path:
+    paths = ProjectPaths.for_project(project, output_root)
+    target_dir = paths.root / ("references" if kind == "reference" else "images/manual")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"{image_id}.png"
+    shutil.copyfile(source_path, target_path)
+
+    images = read_image_manifest(paths.image_manifest)
+    images = [image for image in images if image.shot_id != image_id]
+    images.append(
+        GeneratedImage(
+            shot_id=image_id,
+            path=str(target_path),
+            model="manual-chatgpt",
+            prompt="Web UIからアップロードされた手作業生成画像",
+            status="success",
+        )
+    )
+    write_image_manifest(images, paths.image_manifest)
+    return target_path
+
+
+def read_image_manifest(path: Path) -> list[GeneratedImage]:
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return [GeneratedImage.model_validate(item) for item in data.get("images", [])]

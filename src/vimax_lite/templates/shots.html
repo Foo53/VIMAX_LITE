@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}ショット生成 - {{ project }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1>ショット生成キュー</h1>
+    <a class="button secondary" href="/projects/{{ project }}">戻る</a>
+    <a class="button secondary" href="/projects/{{ project }}/references">参照画像へ</a>
+  </div>
+  <div class="grid">
+    <div class="stat"><strong>総数</strong><br>{{ counts.total }}</div>
+    <div class="stat"><strong>生成済み</strong><br>{{ counts.generated }}</div>
+    <div class="stat"><strong>残り生成必要枚数</strong><br>{{ counts.remaining }}</div>
+  </div>
+</section>
+{% for shot in reference_plan.shots %}
+  <section class="panel shot">
+    <div class="toolbar">
+      <h2>{{ shot.shot_id }}</h2>
+      {% if shot.status == "generated" %}
+        <span class="badge">生成済み</span>
+      {% else %}
+        <span class="badge warn">未生成</span>
+      {% endif %}
+    </div>
+    <p>{{ shot.description }}</p>
+    <h3>必ず添付する参照画像</h3>
+    <ul class="refs">
+      {% for ref in shot.required_references %}
+        <li>{{ ref }}</li>
+      {% else %}
+        <li>なし</li>
+      {% endfor %}
+    </ul>
+    <h3>ChatGPT貼り付け用プロンプト</h3>
+    <textarea class="copybox" readonly>{{ shot.manual_prompt }}</textarea>
+    <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/upload" enctype="multipart/form-data">
+      <label>生成画像をアップロード</label>
+      <input type="file" name="file" accept="image/*" required>
+      <p><button type="submit">保存して次ショットの参照に使う</button></p>
+    </form>
+  </section>
+{% endfor %}
+{% endblock %}

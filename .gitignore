@@ -7,5 +7,6 @@ __pycache__/
 .env
 outputs/
 tmp_smoke/
+tmp_web/
 tmp_cli_check/
 *.egg-info/

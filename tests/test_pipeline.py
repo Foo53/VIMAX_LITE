@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vimax_lite.cli import main
+from vimax_lite.manual_workflow import image_counts, prepare_manual_image_workflow
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
 
@@ -89,6 +90,29 @@ class PipelineTest(unittest.TestCase):
             with redirect_stdout(output):
                 main(["--output-root", temp, "inspect-rag", "--project", "demo"])
             self.assertIn("character:", output.getvalue())
+
+    def test_manual_workflow_outputs_reference_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "雨の中でロボットが音楽を聞く",
+                    "--provider",
+                    "mock",
+                ]
+            )
+            workflow = prepare_manual_image_workflow("demo", Path(temp))
+            root = Path(temp) / "demo"
+            self.assertTrue((root / "references" / "character_reference_sheet.md").exists())
+            self.assertTrue((root / "reference_plan.md").exists())
+            self.assertTrue((root / "manual_generation_guide.md").exists())
+            self.assertEqual(workflow["reference_plan"]["remaining"], 3)
+            self.assertEqual(image_counts("demo", Path(temp))["remaining"], 3)
 
 
 if __name__ == "__main__":

@@ -49,6 +49,10 @@ def main(argv: list[str] | None = None) -> None:
     inspect_cmd = sub.add_parser("inspect-rag")
     inspect_cmd.add_argument("--project", required=True)
 
+    web_cmd = sub.add_parser("web")
+    web_cmd.add_argument("--host", default="127.0.0.1")
+    web_cmd.add_argument("--port", type=int, default=8000)
+
     args = parser.parse_args(argv)
     output_root = Path(args.output_root)
 
@@ -134,6 +138,12 @@ def main(argv: list[str] | None = None) -> None:
         paths = ProjectPaths.for_project(args.project, output_root)
         rag = RAGStore(paths.rag_store)
         print(json.dumps({"records": [record.__dict__ for record in rag.records]}, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "web":
+        from vimax_lite.web_app import run_web_app
+
+        run_web_app(args.host, args.port, output_root)
         return
 
 

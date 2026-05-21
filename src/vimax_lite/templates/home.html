@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}ViMax Lite - 新規制作{% endblock %}
+{% block content %}
+<div class="grid">
+  <section class="panel">
+    <h1>新規プロジェクト</h1>
+    <p class="muted">アイデアを入力すると、エージェントが制作設計、ショット、プロンプト、参照画像ワークフローを順番に生成します。</p>
+    <form method="post" action="/projects/generate">
+      <label>プロジェクト名</label>
+      <input name="project" value="portfolio-demo" required>
+      <label>アイデア</label>
+      <textarea name="idea" required>雨の東京路地で、孤独な配達ロボットが音楽を見つける</textarea>
+      <label>想定視聴者</label>
+      <input name="audience" value="general">
+      <label>映像スタイル</label>
+      <input name="style" value="cinematic">
+      <label>想定尺（秒）</label>
+      <input name="duration_seconds" type="number" value="60" min="10">
+      <label>Provider</label>
+      <select name="provider">
+        <option value="mock">mock</option>
+        <option value="gemini">gemini</option>
+        <option value="claude">claude</option>
+      </select>
+      <label>Model</label>
+      <input name="model" value="gemini-2.5-flash">
+      <p><button type="submit">制作設計を生成</button></p>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>既存プロジェクト</h2>
+    {% if projects %}
+      <ul>
+      {% for project in projects %}
+        <li><a href="/projects/{{ project }}">{{ project }}</a></li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">まだ生成済みプロジェクトはありません。</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

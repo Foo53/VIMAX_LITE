@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ project }} - ViMax Lite{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1>{{ design.brief.title }}</h1>
+    <a class="button secondary" href="/projects/{{ project }}/references">参照画像</a>
+    <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成</a>
+  </div>
+  <p>{{ design.brief.logline }}</p>
+  <div class="grid">
+    <div class="stat"><strong>ショット数</strong><br>{{ counts.total }}</div>
+    <div class="stat"><strong>画像生成済み</strong><br>{{ counts.generated }}</div>
+    <div class="stat"><strong>残り生成枚数</strong><br>{{ counts.remaining }}</div>
+  </div>
+</section>
+<section class="grid">
+  <div class="panel">
+    <h2>キャラクター</h2>
+    {% for character in design.characters %}
+      <h3>{{ character.name }}</h3>
+      <p>{{ character.appearance }}</p>
+      <p class="muted">{{ character.wardrobe }}</p>
+    {% endfor %}
+  </div>
+  <div class="panel">
+    <h2>継続性指摘</h2>
+    {% if design.continuity_issues %}
+      {% for issue in design.continuity_issues %}
+        <p><span class="badge warn">{{ issue.severity }}</span> {{ issue.location }}</p>
+        <p>{{ issue.issue }}</p>
+      {% endfor %}
+    {% else %}
+      <p class="muted">指摘はありません。</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

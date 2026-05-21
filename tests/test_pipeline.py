@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vimax_lite.cli import main
-from vimax_lite.manual_workflow import image_counts, prepare_manual_image_workflow
+from vimax_lite.manual_workflow import build_manual_prompt, image_counts, prepare_manual_image_workflow
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
 
@@ -113,6 +113,18 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue((root / "manual_generation_guide.md").exists())
             self.assertEqual(workflow["reference_plan"]["remaining"], 3)
             self.assertEqual(image_counts("demo", Path(temp))["remaining"], 3)
+
+    def test_manual_prompt_is_english_and_labels_reference_roles(self) -> None:
+        prompt = build_manual_prompt(
+            "shot_002",
+            "Rainy Tokyo alley, lonely delivery robot finds music.",
+            ["references/character_robot_front.png", "images/manual/shot_001.png"],
+        )
+        self.assertIn("Generate one production-quality still image", prompt)
+        self.assertIn("Image 0", prompt)
+        self.assertIn("primary character design reference", prompt)
+        self.assertIn("Image 1", prompt)
+        self.assertIn("previous generated shot", prompt)
 
 
 if __name__ == "__main__":

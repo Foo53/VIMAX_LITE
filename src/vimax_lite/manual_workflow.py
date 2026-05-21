@@ -89,23 +89,49 @@ def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> 
 
 
 def build_manual_prompt(shot_id: str, image_prompt: str, required_refs: list[str]) -> str:
-    refs = "\n".join(f"- {ref}" for ref in required_refs) if required_refs else "- なし"
-    return f"""次のショット画像を生成してください。
+    ref_lines = build_reference_instruction_lines(required_refs)
+    refs = "\n".join(ref_lines) if ref_lines else "- No reference image is attached for this shot."
+    return f"""Generate one production-quality still image for the following shot.
 
-ショットID: {shot_id}
+Shot ID: {shot_id}
 
-必ず添付する参照画像:
+Required reference images to attach:
 {refs}
 
-生成方針:
-- 添付したキャラクター参照画像と同一キャラクターとして維持してください。
-- 直前ショット画像がある場合、空間、天候、光、キャラクター状態を自然につなげてください。
-- 新しいキャラクターデザインや別の世界観に変更しないでください。
-- 1枚の完成画像として生成してください。
+Reference usage rules:
+- Keep the character identity, proportions, materials, colors, costume, and distinctive features consistent with the attached character reference images.
+- If a previous shot image is attached, use it for continuity of environment, lighting, weather, spatial layout, character state, and overall visual tone.
+- Do not redesign the character, costume, environment, color palette, or story world unless the shot prompt explicitly requires it.
+- Use the attached references as visual anchors, but compose a new finished image for this exact shot.
+- Generate a single final cinematic still image. Do not create a storyboard grid, collage, border, caption, logo, watermark, or visible text.
 
-画像プロンプト:
+Shot prompt:
 {image_prompt}
 """
+
+
+def build_reference_instruction_lines(required_refs: list[str]) -> list[str]:
+    lines = []
+    for index, ref in enumerate(required_refs):
+        role = describe_reference_role(ref)
+        lines.append(f"- Image {index}: `{ref}`. {role}")
+    return lines
+
+
+def describe_reference_role(ref: str) -> str:
+    if ref.startswith("references/character_"):
+        if ref.endswith("_front.png"):
+            return "Use this as the primary character design reference for face, body shape, costume, colors, and materials."
+        if ref.endswith("_side.png"):
+            return "Use this to preserve the character silhouette, side profile, proportions, costume, and material continuity."
+        if ref.endswith("_back.png"):
+            return "Use this to preserve the character's back view, silhouette, costume, and material continuity."
+        if ref.endswith("_detail.png"):
+            return "Use this to preserve close-up design details, textures, colors, and distinctive features."
+        return "Use this as a character consistency reference."
+    if ref.startswith("images/manual/"):
+        return "Use this previous generated shot as the temporal continuity reference for lighting, environment, camera feel, atmosphere, and story state."
+    return "Use this as a visual continuity reference."
 
 
 def write_reference_outputs(paths: ProjectPaths, references: dict[str, Any], reference_plan: dict[str, Any]) -> None:

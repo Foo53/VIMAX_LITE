@@ -129,8 +129,6 @@ Remotion や将来の動画生成APIが読む共通仕様です。
 ```bash
 vimax-lite idea2design --project portfolio-demo --idea "..." --output-mode remotion
 vimax-lite timeline --project portfolio-demo
-vimax-lite narrate --project portfolio-demo --provider mock
-vimax-lite tts --project portfolio-demo --provider local
 vimax-lite render-video --project portfolio-demo --renderer remotion
 ```
 
@@ -192,8 +190,17 @@ Remotion プロジェクトを使って MP4 を作ります。
 - `timeline_manifest.json` を Remotion に渡す。
 - 画像を順番に表示する。
 - 字幕を焼き込む。
-- 音声を重ねる。
+- 現時点では音声を重ねない。
 - `videos/assembled_video.mp4` を出力する。
+
+初回実行前に、`remotion/` ディレクトリで依存関係を入れます。
+
+```bash
+cd remotion
+npm install
+cd ..
+vimax-lite render-video --project portfolio-demo
+```
 
 ## Web UI の拡張案
 
@@ -204,16 +211,12 @@ Remotion プロジェクトを使って MP4 を作ります。
 - 画像が揃っているショット数。
 - 未生成画像の一覧。
 - 字幕プレビュー。
-- ナレーション台本。
-- 音声生成状態。
 - Remotion レンダリング状態。
 - 完成動画のプレビューとダウンロード導線。
 
 操作:
 
 - タイムライン生成。
-- 字幕/ナレーション生成。
-- 音声生成。
 - 動画レンダリング。
 
 ## Remotion 側の構成案
@@ -303,7 +306,7 @@ LumaVideoGenerator
 
 - `timeline` コマンドを追加する。
 - 画像の不足チェックをする。
-- 字幕とナレーション台本を生成する。
+- 字幕テキストを生成する。
 
 ### Phase C: Remotion 導入
 
@@ -313,8 +316,10 @@ LumaVideoGenerator
 - 字幕を焼き込む。
 - `npx remotion render` で MP4 を出力する。
 
-### Phase D: TTS 導入
+### Phase D: BGM / SE / TTS 導入
 
+- BGMトラックを追加する。
+- ショット単位のSEを追加する。
 - `TTSProvider` を追加する。
 - `mock` では無音音声を作る。
 - 実 provider は後から追加する。
@@ -325,6 +330,18 @@ LumaVideoGenerator
 - `VideoGenerationProvider` を追加する。
 - ショット単位でAI動画クリップを生成する。
 - 生成クリップを Remotion の入力にする。
+
+## 今後のTODO
+
+現在の実装は、音なし・字幕付きの画像連結動画までを対象にしています。
+
+次に追加する予定の機能:
+
+- BGM: 作品全体に流す音楽トラックを追加する。
+- SE: 雨音、足音、機械音、UI音などをショット単位で追加する。
+- 読み上げ音声: `narration` を TTSProvider に渡し、ナレーション音声を生成して重ねる。
+- `subtitles.srt`: Remotion以外でも使える字幕ファイルを書き出す。
+- 音量ミックス: BGM、SE、読み上げ音声の音量バランスを調整する。
 
 ## 学習ポイント
 

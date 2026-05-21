@@ -15,6 +15,7 @@ from vimax_lite.pipeline import (
 )
 from vimax_lite.providers import ProviderError, make_provider
 from vimax_lite.rag import RAGStore
+from vimax_lite.timeline import build_timeline_manifest, render_timeline_with_remotion, write_timeline_manifest
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -48,6 +49,16 @@ def main(argv: list[str] | None = None) -> None:
 
     inspect_cmd = sub.add_parser("inspect-rag")
     inspect_cmd.add_argument("--project", required=True)
+
+    timeline_cmd = sub.add_parser("timeline")
+    timeline_cmd.add_argument("--project", required=True)
+    timeline_cmd.add_argument("--fps", type=int, default=30)
+    timeline_cmd.add_argument("--width", type=int, default=1920)
+    timeline_cmd.add_argument("--height", type=int, default=1080)
+
+    render_video_cmd = sub.add_parser("render-video")
+    render_video_cmd.add_argument("--project", required=True)
+    render_video_cmd.add_argument("--renderer", choices=["remotion"], default="remotion")
 
     web_cmd = sub.add_parser("web")
     web_cmd.add_argument("--host", default="127.0.0.1")
@@ -140,6 +151,29 @@ def main(argv: list[str] | None = None) -> None:
         paths = ProjectPaths.for_project(args.project, output_root)
         rag = RAGStore(paths.rag_store)
         print(json.dumps({"records": [record.__dict__ for record in rag.records]}, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "timeline":
+        manifest = build_timeline_manifest(
+            project=args.project,
+            output_root=output_root,
+            fps=args.fps,
+            width=args.width,
+            height=args.height,
+        )
+        target = write_timeline_manifest(manifest, args.project, output_root)
+        ready = sum(1 for shot in manifest.shots if shot.status == "ready")
+        print(f"タイムラインを生成しました: {target}")
+        print(f"使用可能画像: {ready}/{len(manifest.shots)}")
+        return
+
+    if args.command == "render-video":
+        result = render_timeline_with_remotion(project=args.project, output_root=output_root, repo_root=Path.cwd())
+        if result.status == "success":
+            print(f"Remotion動画を生成しました: {result.output_path}")
+        else:
+            print("Remotion動画生成に失敗しました。outputs/<project>/videos/render_report.md を確認してください。", file=sys.stderr)
+            print("依存関係が未導入の場合は remotion/ で npm install を実行してください。", file=sys.stderr)
         return
 
     if args.command == "web":

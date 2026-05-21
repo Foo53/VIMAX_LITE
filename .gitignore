@@ -10,3 +10,5 @@ tmp_smoke/
 tmp_web/
 tmp_cli_check/
 *.egg-info/
+remotion/node_modules/
+remotion/out/

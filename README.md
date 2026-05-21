@@ -42,7 +42,11 @@ Remotionで画像連結動画を作る前提の制作設計にする場合:
 
 ```bash
 vimax-lite idea2design --project portfolio-demo --idea "..." --provider mock --output-mode remotion
+vimax-lite timeline --project portfolio-demo
+vimax-lite render-video --project portfolio-demo
 ```
+
+`render-video` は `remotion/` のNode.js依存関係を使います。初回は `cd remotion && npm install` を実行してください。現時点のRemotion動画は音なし・字幕付きです。BGM、SE、読み上げ音声は今後追加予定です。
 
 Web UIでアイデア入力から始める場合:
 
@@ -111,6 +115,7 @@ outputs/<project>/
   reference_plan.md
   reference_plan.json
   manual_generation_guide.md
+  timeline_manifest.json
   rag_store.json
   references/
     character_reference_sheet.md
@@ -120,6 +125,9 @@ outputs/<project>/
     shot_001.png
     manual/
       <shot_id>.png
+  videos/
+    assembled_video.mp4
+    render_report.md
 ```
 
 ## 本家 ViMax との差分

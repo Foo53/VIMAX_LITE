@@ -8,21 +8,80 @@
     <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成へ</a>
   </div>
   <p class="muted">まずキャラクター参照画像をChatGPTで生成し、ここへアップロードします。以降のショットで添付参照として使います。</p>
+  <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。保存前に選択中プレビューを確認できます。</p>
+  <p class="muted">保存済み画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
+<form id="batch-reference-form" method="post" action="/projects/{{ project }}/references/upload-batch" enctype="multipart/form-data"></form>
 {% for item in workflow.references.characters %}
   <section class="panel">
     <h2>{{ item.character.name }}</h2>
     {% for prompt in item.prompts %}
       <div class="panel">
-        <h3>{{ prompt.reference_id }}</h3>
+        <div class="toolbar">
+          <h3>{{ prompt.reference_id }}</h3>
+          {% if prompt.saved %}
+            <span class="badge">保存済み</span>
+          {% else %}
+            <span class="badge warn">未保存</span>
+          {% endif %}
+        </div>
         <textarea class="copybox" readonly>{{ prompt.prompt }}</textarea>
+        <div class="preview-grid">
+          <div>
+            <label>保存済み画像</label>
+            <div class="image-preview">
+              {% if prompt.saved %}
+                <img src="/files/{{ project }}/{{ prompt.saved_path }}?v={{ prompt.saved_mtime }}" alt="{{ prompt.reference_id }} 保存済み画像" data-draggable-asset="true" data-drag-name="{{ prompt.reference_id }}.png">
+              {% else %}
+                未保存
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <label>選択中画像</label>
+            <div class="image-preview" data-preview-for="{{ prompt.reference_id }}">未選択</div>
+          </div>
+        </div>
+        <label>一括保存用に画像を選択</label>
+        <input form="batch-reference-form" type="file" name="reference_file__{{ prompt.reference_id }}" accept="image/*" data-preview-target="{{ prompt.reference_id }}">
+        <p class="help">保存先: `references/{{ prompt.reference_id }}.png`</p>
         <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/upload" enctype="multipart/form-data">
-          <label>生成画像をアップロード</label>
-          <input type="file" name="file" accept="image/*" required>
-          <p><button type="submit">保存</button></p>
+          <label>この画像だけ保存</label>
+          <input type="file" name="file" accept="image/*" required data-preview-target="{{ prompt.reference_id }}">
+          <p><button type="submit">この画像だけ保存</button></p>
         </form>
       </div>
     {% endfor %}
   </section>
 {% endfor %}
+  <section class="panel">
+    <button form="batch-reference-form" type="submit">選択した参照画像を一括保存</button>
+  </section>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("input[type='file'][data-preview-target]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const target = input.dataset.previewTarget;
+        const preview = document.querySelector(`[data-preview-for="${target}"]`);
+        if (!preview) return;
+        const file = input.files && input.files[0];
+        if (!file) {
+          preview.textContent = "未選択";
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        preview.innerHTML = "";
+        const image = document.createElement("img");
+        image.src = url;
+        image.alt = file.name;
+        image.dataset.draggableAsset = "true";
+        image.dataset.dragName = file.name;
+        preview.appendChild(image);
+        if (window.vimaxMakeImageDraggable) {
+          window.vimaxMakeImageDraggable(image);
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

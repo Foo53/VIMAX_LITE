@@ -17,11 +17,13 @@ from vimax_lite.manual_workflow import (
     image_counts,
     load_design,
     prepare_manual_image_workflow,
+    register_uploaded_file_bytes,
     register_uploaded_image,
 )
 from vimax_lite.models import ProjectPaths
 from vimax_lite.pipeline import run_idea_pipeline
 from vimax_lite.providers import ProviderError, make_provider
+from vimax_lite.timeline import build_timeline_manifest, render_timeline_with_remotion, write_timeline_manifest
 
 
 @dataclass
@@ -179,11 +181,31 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         design = load_design(paths)
         counts = image_counts(project, output_root)
         workflow = prepare_manual_image_workflow(project, output_root)
+        timeline_path = paths.root / "timeline_manifest.json"
+        video_path = paths.root / "videos" / "assembled_video.mp4"
         return templates.TemplateResponse(
             request,
             "project.html",
-            {"project": project, "design": design, "counts": counts, "workflow": workflow},
+            {
+                "project": project,
+                "design": design,
+                "counts": counts,
+                "workflow": workflow,
+                "timeline_exists": timeline_path.exists(),
+                "video_exists": video_path.exists(),
+            },
         )
+
+    @app.post("/projects/{project}/timeline")
+    def create_timeline(project: str) -> RedirectResponse:
+        manifest = build_timeline_manifest(project=project, output_root=output_root)
+        write_timeline_manifest(manifest, project, output_root)
+        return RedirectResponse(f"/projects/{project}", status_code=303)
+
+    @app.post("/projects/{project}/render-video")
+    def render_video(project: str) -> RedirectResponse:
+        render_timeline_with_remotion(project=project, output_root=output_root, repo_root=Path.cwd())
+        return RedirectResponse(f"/projects/{project}", status_code=303)
 
     @app.get("/projects/{project}/shots", response_class=HTMLResponse)
     def shots_page(request: Request, project: str) -> HTMLResponse:
@@ -219,6 +241,22 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
             temp_path = Path(temp.name)
         register_uploaded_image(project, reference_id, temp_path, output_root=output_root, kind="reference")
         temp_path.unlink(missing_ok=True)
+        prepare_manual_image_workflow(project, output_root)
+        return RedirectResponse(f"/projects/{project}/references", status_code=303)
+
+    @app.post("/projects/{project}/references/upload-batch")
+    async def upload_reference_images_batch(request: Request, project: str) -> RedirectResponse:
+        form = await request.form()
+        for key, value in form.multi_items():
+            if not key.startswith("reference_file__"):
+                continue
+            if not hasattr(value, "filename") or not hasattr(value, "read") or not value.filename:
+                continue
+            reference_id = key.removeprefix("reference_file__")
+            data = await value.read()
+            if data:
+                register_uploaded_file_bytes(project, reference_id, data, output_root=output_root, kind="reference")
+            await value.close()
         prepare_manual_image_workflow(project, output_root)
         return RedirectResponse(f"/projects/{project}/references", status_code=303)
 

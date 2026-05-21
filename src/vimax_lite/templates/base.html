@@ -35,6 +35,11 @@
     .inline-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
     .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .preset-row button { padding: 7px 10px; font-size: 13px; }
+    .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 12px 0; }
+    .image-preview { border: 1px solid var(--line); border-radius: 8px; min-height: 160px; background: #f8fafc; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--muted); font-size: 13px; }
+    .image-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .draggable-asset { cursor: grab; }
+    .draggable-asset:active { cursor: grabbing; }
     .stat { border-left: 4px solid var(--accent); padding-left: 12px; }
     .progress { height: 14px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
     .progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
@@ -55,5 +60,68 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script>
+    (() => {
+      const fileCache = new Map();
+
+      const filenameFromImage = (image) => {
+        if (image.dataset.dragName) return image.dataset.dragName;
+        const url = new URL(image.currentSrc || image.src, window.location.href);
+        const last = url.pathname.split("/").filter(Boolean).pop() || "vimax-reference.png";
+        return decodeURIComponent(last).replace(/[^A-Za-z0-9_.-]/g, "_");
+      };
+
+      const cacheImageFile = async (image) => {
+        const src = image.currentSrc || image.src;
+        if (!src || fileCache.has(src)) return fileCache.get(src);
+        try {
+          const response = await fetch(src);
+          const blob = await response.blob();
+          const type = blob.type || "image/png";
+          const file = new File([blob], filenameFromImage(image), {type});
+          fileCache.set(src, file);
+          image.dataset.dragReady = "true";
+          return file;
+        } catch (_error) {
+          return null;
+        }
+      };
+
+      const makeImageDraggable = (image) => {
+        image.setAttribute("draggable", "true");
+        image.classList.add("draggable-asset");
+        image.title = "ChatGPTへドラッグして添付できます";
+        image.addEventListener("pointerenter", () => {
+          void cacheImageFile(image);
+        });
+        image.addEventListener("dragstart", (event) => {
+          const transfer = event.dataTransfer;
+          if (!transfer) return;
+          const src = image.currentSrc || image.src;
+          const absoluteUrl = new URL(src, window.location.href).href;
+          const file = fileCache.get(src);
+          transfer.effectAllowed = "copy";
+          transfer.setData("text/uri-list", absoluteUrl);
+          transfer.setData("text/plain", absoluteUrl);
+          transfer.setData("DownloadURL", `image/png:${filenameFromImage(image)}:${absoluteUrl}`);
+          if (file && transfer.items) {
+            try {
+              transfer.items.add(file);
+            } catch (_error) {
+              // Some browsers only allow URL data for cross-page drags.
+            }
+          } else {
+            void cacheImageFile(image);
+          }
+        });
+        void cacheImageFile(image);
+      };
+
+      document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll("img[data-draggable-asset='true']").forEach(makeImageDraggable);
+      });
+      window.vimaxMakeImageDraggable = makeImageDraggable;
+    })();
+  </script>
 </body>
 </html>

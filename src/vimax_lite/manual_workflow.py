@@ -16,6 +16,7 @@ def prepare_manual_image_workflow(project: str, output_root: Path = Path("output
     paths = ProjectPaths.for_project(project, output_root)
     design = load_design(paths)
     references = build_character_reference_sheet(design)
+    annotate_reference_uploads(references, paths)
     reference_plan = build_shot_reference_plan(design, paths)
     write_reference_outputs(paths, references, reference_plan)
     return {"references": references, "reference_plan": reference_plan}
@@ -38,24 +39,26 @@ def build_character_reference_sheet(design: ProductionDesign) -> dict[str, Any]:
             "maintain the same identity, silhouette, proportions, colors, costume, and material details across every reference view",
         )
         base_prompt = (
-            f"Create one consistent character reference image for {character.name}. "
+            f"Create exactly one single-view character reference image for {character.name}. "
             f"Role: {role}. "
             f"Appearance: {appearance}. "
             f"Wardrobe or exterior: {wardrobe}. "
             f"Personality cue: {personality}. "
             f"Continuity rules: {'; '.join(continuity_notes)}. "
-            "Use a clean neutral background, full-body production reference sheet style, clear readable silhouette, "
-            "consistent colors and materials, no scene action, no caption, no logo, no visible text. "
+            "Use a clean neutral background, one centered character only, one pose only, clear readable silhouette, "
+            "consistent colors and materials, no scene action, no caption, no logo, no visible text, "
+            "no turnaround sheet, no model sheet, no contact sheet, no grid, no panels, no multiple views, no extra poses, no duplicate characters. "
             "If any source metadata was non-English, interpret its meaning internally as precise visual English guidance."
         )
         for pose in REFERENCE_POSES:
+            pose_instruction = reference_pose_instruction(pose)
             prompts.append(
                 {
                     "reference_id": f"character_{character.id}_{pose}",
                     "character_id": character.id,
                     "pose": pose,
                     "filename": f"character_{character.id}_{pose}.png",
-                    "prompt": f"{base_prompt} View: {pose}. Keep the exact same character design across all views.",
+                    "prompt": f"{base_prompt} {pose_instruction} Generate only this single requested view in this image.",
                 }
             )
         characters.append({"character": character.model_dump(), "prompts": prompts})
@@ -64,6 +67,28 @@ def build_character_reference_sheet(design: ProductionDesign) -> dict[str, Any]:
         "instruction": "最初にこの参照画像を作成し、以降のショット生成では必ず添付してください。",
         "characters": characters,
     }
+
+
+def annotate_reference_uploads(references: dict[str, Any], paths: ProjectPaths) -> None:
+    for item in references["characters"]:
+        for prompt in item["prompts"]:
+            reference_id = prompt["reference_id"]
+            path = paths.root / "references" / f"{reference_id}.png"
+            prompt["saved"] = path.exists()
+            prompt["saved_path"] = f"references/{reference_id}.png" if path.exists() else None
+            prompt["saved_mtime"] = str(int(path.stat().st_mtime)) if path.exists() else ""
+
+
+def reference_pose_instruction(pose: str) -> str:
+    if pose == "front":
+        return "View: front view. Show exactly one full-body character facing the camera."
+    if pose == "side":
+        return "View: side profile. Show exactly one full-body character in a clean left-facing side view."
+    if pose == "back":
+        return "View: back view. Show exactly one full-body character facing away from the camera."
+    if pose == "detail":
+        return "View: detail reference. Show exactly one close-up crop focused on the most important design details, materials, colors, and distinctive features."
+    return f"View: {pose}. Show exactly one character in one pose."
 
 
 def english_or_fallback(text: str, fallback: str) -> str:
@@ -100,8 +125,10 @@ def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> 
         if previous_shot_file:
             required_refs.append(previous_shot_file)
         image_prompt = prompt_by_shot.get(shot.shot_id)
-        manual_prompt = build_manual_prompt(shot.shot_id, image_prompt.prompt if image_prompt else shot.description, required_refs)
+        visual_prompt = build_shot_visual_prompt(shot, image_prompt.prompt if image_prompt else "")
+        manual_prompt = build_manual_prompt(shot.shot_id, visual_prompt, required_refs)
         output_file = f"images/manual/{shot.shot_id}.png"
+        output_path = paths.root / output_file
         shots.append(
             {
                 "shot_id": shot.shot_id,
@@ -109,7 +136,10 @@ def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> 
                 "order": shot.order,
                 "description": shot.description,
                 "required_references": required_refs,
+                "reference_assets": build_reference_assets(paths, required_refs),
                 "output_file": output_file,
+                "output_saved_path": output_file if output_path.exists() else None,
+                "output_saved_mtime": str(int(output_path.stat().st_mtime)) if output_path.exists() else "",
                 "manual_prompt": manual_prompt,
                 "status": image_status(paths, shot.shot_id),
             }
@@ -118,6 +148,35 @@ def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> 
     total = len(shots)
     done = sum(1 for shot in shots if shot["status"] == "generated")
     return {"total": total, "generated": done, "remaining": total - done, "shots": shots}
+
+
+def build_shot_visual_prompt(shot, image_prompt: str) -> str:
+    prompt = english_or_fallback(image_prompt, "")
+    if not prompt:
+        prompt = (
+            "Create a cinematic still image for this shot based on the structured shot design. "
+            "Translate any non-English shot notes internally into precise visual English. "
+            f"Shot description: {shot.description}. "
+            f"Camera: {shot.camera}. Lens: {shot.lens}. Lighting: {shot.lighting}. "
+            f"First-frame intent: {shot.first_frame}. Last-frame intent: {shot.last_frame}."
+        )
+    return prompt
+
+
+def build_reference_assets(paths: ProjectPaths, required_refs: list[str]) -> list[dict[str, Any]]:
+    assets = []
+    for index, ref in enumerate(required_refs):
+        path = paths.root / ref
+        assets.append(
+            {
+                "index": index,
+                "path": ref,
+                "exists": path.exists(),
+                "mtime": str(int(path.stat().st_mtime)) if path.exists() else "",
+                "role": describe_reference_role(ref),
+            }
+        )
+    return assets
 
 
 def build_manual_prompt(shot_id: str, image_prompt: str, required_refs: list[str]) -> str:
@@ -135,7 +194,9 @@ Reference usage rules:
 - If a previous shot image is attached, use it for continuity of environment, lighting, weather, spatial layout, character state, and overall visual tone.
 - Do not redesign the character, costume, environment, color palette, or story world unless the shot prompt explicitly requires it.
 - Use the attached references as visual anchors, but compose a new finished image for this exact shot.
-- Generate a single final cinematic still image. Do not create a storyboard grid, collage, border, caption, logo, watermark, or visible text.
+- Generate a single final cinematic still image.
+- Do not copy the reference images as a reference sheet. Do not show multiple views, multiple poses, duplicate characters, grids, panels, turnarounds, contact sheets, labels, captions, logos, watermarks, or visible text.
+- If the shot prompt contains non-English text, translate and interpret it internally as precise visual English before generating.
 
 Shot prompt:
 {image_prompt}
@@ -240,6 +301,28 @@ def register_uploaded_image(project: str, image_id: str, source_path: Path, *, o
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"{image_id}.png"
     shutil.copyfile(source_path, target_path)
+
+    images = read_image_manifest(paths.image_manifest)
+    images = [image for image in images if image.shot_id != image_id]
+    images.append(
+        GeneratedImage(
+            shot_id=image_id,
+            path=str(target_path),
+            model="manual-chatgpt",
+            prompt="Web UIからアップロードされた手作業生成画像",
+            status="success",
+        )
+    )
+    write_image_manifest(images, paths.image_manifest)
+    return target_path
+
+
+def register_uploaded_file_bytes(project: str, image_id: str, data: bytes, *, output_root: Path = Path("outputs"), kind: str = "shot") -> Path:
+    paths = ProjectPaths.for_project(project, output_root)
+    target_dir = paths.root / ("references" if kind == "reference" else "images/manual")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"{image_id}.png"
+    target_path.write_bytes(data)
 
     images = read_image_manifest(paths.image_manifest)
     images = [image for image in images if image.shot_id != image_id]

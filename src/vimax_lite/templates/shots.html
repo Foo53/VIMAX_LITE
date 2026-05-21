@@ -12,6 +12,7 @@
     <div class="stat"><strong>生成済み</strong><br>{{ counts.generated }}</div>
     <div class="stat"><strong>残り生成必要枚数</strong><br>{{ counts.remaining }}</div>
   </div>
+  <p class="muted">表示されている参照画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
 {% for shot in reference_plan.shots %}
   <section class="panel shot">
@@ -25,20 +26,78 @@
     </div>
     <p>{{ shot.description }}</p>
     <h3>必ず添付する参照画像</h3>
-    <ul class="refs">
-      {% for ref in shot.required_references %}
-        <li>{{ ref }}</li>
+    <div class="preview-grid">
+      {% for ref in shot.reference_assets %}
+        <div>
+          <p><strong>Image {{ ref.index }}</strong></p>
+          <p class="help">{{ ref.path }}</p>
+          <div class="image-preview">
+            {% if ref.exists %}
+              <img src="/files/{{ project }}/{{ ref.path }}?v={{ ref.mtime }}" alt="{{ ref.path }}" data-draggable-asset="true">
+            {% else %}
+              未アップロード
+            {% endif %}
+          </div>
+        </div>
       {% else %}
-        <li>なし</li>
+        <p class="muted">なし</p>
       {% endfor %}
-    </ul>
+    </div>
     <h3>ChatGPT貼り付け用プロンプト</h3>
     <textarea class="copybox" readonly>{{ shot.manual_prompt }}</textarea>
     <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/upload" enctype="multipart/form-data">
       <label>生成画像をアップロード</label>
-      <input type="file" name="file" accept="image/*" required>
+      {% if shot.output_saved_path %}
+        <div class="preview-grid">
+          <div>
+            <label>保存済みショット画像</label>
+            <div class="image-preview">
+              <img src="/files/{{ project }}/{{ shot.output_saved_path }}?v={{ shot.output_saved_mtime }}" alt="{{ shot.shot_id }} 保存済み画像" data-draggable-asset="true" data-drag-name="{{ shot.shot_id }}.png">
+            </div>
+          </div>
+          <div>
+            <label>選択中画像</label>
+            <div class="image-preview" data-preview-for="{{ shot.shot_id }}">未選択</div>
+          </div>
+        </div>
+      {% else %}
+        <div class="preview-grid">
+          <div>
+            <label>選択中画像</label>
+            <div class="image-preview" data-preview-for="{{ shot.shot_id }}">未選択</div>
+          </div>
+        </div>
+      {% endif %}
+      <input type="file" name="file" accept="image/*" required data-preview-target="{{ shot.shot_id }}">
       <p><button type="submit">保存して次ショットの参照に使う</button></p>
     </form>
   </section>
 {% endfor %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("input[type='file'][data-preview-target]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const target = input.dataset.previewTarget;
+        const preview = document.querySelector(`[data-preview-for="${target}"]`);
+        if (!preview) return;
+        const file = input.files && input.files[0];
+        if (!file) {
+          preview.textContent = "未選択";
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        preview.innerHTML = "";
+        const image = document.createElement("img");
+        image.src = url;
+        image.alt = file.name;
+        image.dataset.draggableAsset = "true";
+        image.dataset.dragName = file.name;
+        preview.appendChild(image);
+        if (window.vimaxMakeImageDraggable) {
+          window.vimaxMakeImageDraggable(image);
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

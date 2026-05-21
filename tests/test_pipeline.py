@@ -14,6 +14,8 @@ from vimax_lite.cli import main
 from vimax_lite.manual_workflow import build_character_reference_sheet, build_manual_prompt, image_counts, prepare_manual_image_workflow
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
+from vimax_lite.timeline import build_timeline_manifest
+from vimax_lite.web_app import create_app
 
 
 class PipelineTest(unittest.TestCase):
@@ -125,6 +127,8 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("primary character design reference", prompt)
         self.assertIn("Image 1", prompt)
         self.assertIn("previous generated shot", prompt)
+        self.assertIn("Do not show multiple views", prompt)
+        self.assertIn("translate and interpret it internally", prompt)
 
     def test_character_reference_prompt_is_english_for_mock_design(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -144,9 +148,13 @@ class PipelineTest(unittest.TestCase):
             design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
             references = build_character_reference_sheet(design)
             prompt = references["characters"][0]["prompts"][0]["prompt"]
-            self.assertIn("Create one consistent character reference image", prompt)
+            self.assertIn("Create exactly one single-view character reference image", prompt)
             self.assertIn("small white delivery robot", prompt)
             self.assertIn("yellow rain poncho", prompt)
+            self.assertIn("no model sheet", prompt)
+            self.assertIn("no multiple views", prompt)
+            self.assertIn("Show exactly one full-body character facing the camera", prompt)
+            self.assertNotIn("reference sheet style", prompt)
             self.assertNotIn("配達ロボット", prompt)
 
     def test_remotion_output_mode_shapes_design(self) -> None:
@@ -170,6 +178,89 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(design.brief.output_mode, "remotion")
             self.assertIn("Remotion", design.video_prompts[0].prompt)
             self.assertIn("Remotionモード", "\n".join(design.learning_notes))
+
+    def test_timeline_command_writes_manifest_for_remotion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "雨の中でロボットが音楽を聞く",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "remotion",
+                    "--generate-images",
+                    "--max-images",
+                    "3",
+                ]
+            )
+            output = StringIO()
+            with redirect_stdout(output):
+                main(["--output-root", temp, "timeline", "--project", "demo"])
+            root = Path(temp) / "demo"
+            manifest_path = root / "timeline_manifest.json"
+            self.assertTrue(manifest_path.exists())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["output_mode"], "remotion")
+            self.assertEqual(len(manifest["shots"]), 3)
+            self.assertEqual(manifest["shots"][0]["status"], "ready")
+            self.assertIn("BGM", "\n".join(manifest["todos"]))
+
+    def test_timeline_manifest_marks_missing_images(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "雨の中でロボットが音楽を聞く",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "remotion",
+                ]
+            )
+            manifest = build_timeline_manifest(project="demo", output_root=Path(temp))
+            self.assertEqual(manifest.shots[0].status, "missing")
+            self.assertIsNone(manifest.shots[0].image_src)
+
+    def test_reference_batch_upload_saves_each_reference_id(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "雨の中でロボットが音楽を聞く",
+                    "--provider",
+                    "mock",
+                ]
+            )
+            client = TestClient(create_app(Path(temp)))
+            response = client.post(
+                "/projects/demo/references/upload-batch",
+                files={
+                    "reference_file__character_char_robot_front": ("front.png", b"front-image", "image/png"),
+                    "reference_file__character_char_robot_side": ("side.png", b"side-image", "image/png"),
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            root = Path(temp) / "demo" / "references"
+            self.assertEqual((root / "character_char_robot_front.png").read_bytes(), b"front-image")
+            self.assertEqual((root / "character_char_robot_side.png").read_bytes(), b"side-image")
 
 
 if __name__ == "__main__":

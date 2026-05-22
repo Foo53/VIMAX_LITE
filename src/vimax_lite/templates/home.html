@@ -18,7 +18,11 @@
       </select>
       <p class="help">視聴者を選ぶと、脚本の密度、言葉遣い、画面のテンポを調整しやすくなります。</p>
       <label>映像スタイル</label>
-      <input name="style" value="cinematic">
+      <select name="style">
+        {% for option in style_options %}
+          <option value="{{ option.value }}">{{ option.label }}</option>
+        {% endfor %}
+      </select>
       <label>出力モード</label>
       <select name="output_mode">
         {% for option in output_mode_options %}
@@ -26,6 +30,48 @@
         {% endfor %}
       </select>
       <p class="help">Remotionモードでは、静止画をつなげて字幕と読み上げ音声を付ける前提の脚本・ショット設計に寄せます。</p>
+      <div class="inline-fields">
+        <div>
+          <label>ジャンル</label>
+          <select name="genre">
+            {% for option in genre_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>雰囲気</label>
+          <select name="mood">
+            {% for option in mood_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="inline-fields">
+        <div>
+          <label>色調</label>
+          <select name="color_tone">
+            {% for option in color_tone_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>字幕の文体</label>
+          <select name="narration_style">
+            {% for option in narration_style_options %}
+              <option value="{{ option.value }}">{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <label>配信プラットフォーム</label>
+      <select name="target_platform">
+        {% for option in target_platform_options %}
+          <option value="{{ option.value }}">{{ option.label }}</option>
+        {% endfor %}
+      </select>
       <div class="inline-fields">
         <div>
           <label>想定尺（秒）</label>

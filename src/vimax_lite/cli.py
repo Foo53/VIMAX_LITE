@@ -85,6 +85,11 @@ def main(argv: list[str] | None = None) -> None:
                 style=args.style,
                 duration_seconds=args.duration_seconds,
                 output_mode=args.output_mode,
+                genre=args.genre,
+                mood=args.mood,
+                color_tone=args.color_tone,
+                narration_style=args.narration_style,
+                target_platform=args.target_platform,
                 generate_images=args.generate_images,
                 image_model=args.image_model,
                 max_images=args.max_images,
@@ -109,6 +114,11 @@ def main(argv: list[str] | None = None) -> None:
                 style=args.style,
                 duration_seconds=args.duration_seconds,
                 output_mode=args.output_mode,
+                genre=args.genre,
+                mood=args.mood,
+                color_tone=args.color_tone,
+                narration_style=args.narration_style,
+                target_platform=args.target_platform,
                 generate_images=args.generate_images,
                 image_model=args.image_model,
                 max_images=args.max_images,
@@ -196,6 +206,11 @@ def _add_common_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--style", default="cinematic")
     parser.add_argument("--duration-seconds", type=int, default=60)
     parser.add_argument("--output-mode", choices=["standard", "remotion"], default="standard")
+    parser.add_argument("--genre", default="")
+    parser.add_argument("--mood", default="")
+    parser.add_argument("--color-tone", default="")
+    parser.add_argument("--narration-style", default="")
+    parser.add_argument("--target-platform", default="")
     parser.add_argument("--generate-images", action="store_true")
     parser.add_argument("--max-images", type=int, default=1)
     parser.add_argument("--image-delay-seconds", type=float, default=0.0)

@@ -28,6 +28,9 @@ async function poll() {
   const result = document.getElementById("result");
   if (job.status === "completed") {
     result.innerHTML = `<p><a class="button" href="${job.result_url}">プロジェクトを開く</a></p>`;
+    if (job.stage === "completed" && job.result_url && job.result_url.includes("/projects/")) {
+      result.innerHTML += `<p class="muted" style="margin-top:8px">動画ファイルはプロジェクトページの「Remotion動画」セクションから再生できます。</p>`;
+    }
     return;
   }
   if (job.status === "failed") {

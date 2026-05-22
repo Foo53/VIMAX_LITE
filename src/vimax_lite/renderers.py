@@ -37,10 +37,22 @@ def render_design(design: ProductionDesign) -> str:
         f"- 映像スタイル: {design.brief.style}",
         f"- 想定尺: {design.brief.duration_seconds}秒",
         f"- 出力モード: {design.brief.output_mode}",
+    ]
+    if design.brief.genre:
+        lines.append(f"- ジャンル: {design.brief.genre}")
+    if design.brief.mood:
+        lines.append(f"- 雰囲気: {design.brief.mood}")
+    if design.brief.color_tone:
+        lines.append(f"- 色調: {design.brief.color_tone}")
+    if design.brief.narration_style:
+        lines.append(f"- ナレーション文体: {design.brief.narration_style}")
+    if design.brief.target_platform:
+        lines.append(f"- 配信プラットフォーム: {design.brief.target_platform}")
+    lines.extend([
         f"- テーマ: {', '.join(design.brief.themes)}",
         "",
         "## キャラクター",
-    ]
+    ])
     for character in design.characters:
         lines.extend(
             [

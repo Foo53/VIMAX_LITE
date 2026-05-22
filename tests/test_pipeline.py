@@ -262,6 +262,81 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual((root / "character_char_robot_front.png").read_bytes(), b"front-image")
             self.assertEqual((root / "character_char_robot_side.png").read_bytes(), b"side-image")
 
+    def test_narration_caption_used_in_timeline_for_remotion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テスト",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "remotion",
+                ]
+            )
+            manifest = build_timeline_manifest(project="demo", output_root=Path(temp))
+            for shot in manifest.shots:
+                self.assertTrue(shot.caption)
+                self.assertNotIn("ワイドショット", shot.caption)
+                self.assertNotIn("クローズアップ", shot.caption)
+
+    def test_narration_caption_empty_for_standard_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テスト",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "standard",
+                ]
+            )
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            for shot in design.shots:
+                self.assertEqual(shot.narration_caption, "")
+
+    def test_production_brief_new_fields_default_empty(self) -> None:
+        brief = ProductionBrief(title="t", logline="l")
+        self.assertEqual(brief.genre, "")
+        self.assertEqual(brief.mood, "")
+        self.assertEqual(brief.color_tone, "")
+        self.assertEqual(brief.narration_style, "")
+        self.assertEqual(brief.target_platform, "")
+
+    def test_target_platform_sets_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テスト",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "remotion",
+                    "--target-platform",
+                    "tiktok",
+                ]
+            )
+            manifest = build_timeline_manifest(project="demo", output_root=Path(temp))
+            self.assertEqual(manifest.width, 1080)
+            self.assertEqual(manifest.height, 1920)
+
 
 if __name__ == "__main__":
     unittest.main()

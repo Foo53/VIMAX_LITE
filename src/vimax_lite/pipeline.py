@@ -41,6 +41,11 @@ def run_idea_pipeline(
     style: str,
     duration_seconds: int,
     output_mode: str = "standard",
+    genre: str = "",
+    mood: str = "",
+    color_tone: str = "",
+    narration_style: str = "",
+    target_platform: str = "",
     generate_images: bool = False,
     image_model: str = "gemini-2.5-flash-image",
     max_images: int | None = None,
@@ -51,7 +56,7 @@ def run_idea_pipeline(
     init_project(paths)
     rag = RAGStore(paths.rag_store)
     _notify(progress, "brief", "企画整理エージェントで制作ブリーフを生成しています", 1, 9)
-    brief = IdeationAgent(provider).run(idea, audience=audience, style=style, duration_seconds=duration_seconds, output_mode=output_mode)
+    brief = IdeationAgent(provider).run(idea, audience=audience, style=style, duration_seconds=duration_seconds, output_mode=output_mode, genre=genre, mood=mood, color_tone=color_tone, narration_style=narration_style, target_platform=target_platform)
     return _run_common(brief, None, provider, rag, paths, generate_images, image_model, max_images, image_delay_seconds, progress)
 
 
@@ -65,6 +70,11 @@ def run_script_pipeline(
     style: str,
     duration_seconds: int,
     output_mode: str = "standard",
+    genre: str = "",
+    mood: str = "",
+    color_tone: str = "",
+    narration_style: str = "",
+    target_platform: str = "",
     generate_images: bool = False,
     image_model: str = "gemini-2.5-flash-image",
     max_images: int | None = None,
@@ -75,7 +85,7 @@ def run_script_pipeline(
     init_project(paths)
     rag = RAGStore(paths.rag_store)
     _notify(progress, "brief", "企画整理エージェントで制作ブリーフを生成しています", 1, 9)
-    brief = IdeationAgent(provider).run(script, audience=audience, style=style, duration_seconds=duration_seconds, output_mode=output_mode)
+    brief = IdeationAgent(provider).run(script, audience=audience, style=style, duration_seconds=duration_seconds, output_mode=output_mode, genre=genre, mood=mood, color_tone=color_tone, narration_style=narration_style, target_platform=target_platform)
     return _run_common(brief, script, provider, rag, paths, generate_images, image_model, max_images, image_delay_seconds, progress)
 
 

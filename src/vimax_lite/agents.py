@@ -19,8 +19,19 @@ class Agent:
 class IdeationAgent(Agent):
     name = "企画整理エージェント"
 
-    def run(self, user_input: str, *, audience: str, style: str, duration_seconds: int, output_mode: str = "standard") -> ProductionBrief:
+    def run(self, user_input: str, *, audience: str, style: str, duration_seconds: int, output_mode: str = "standard", genre: str = "", mood: str = "", color_tone: str = "", narration_style: str = "", target_platform: str = "") -> ProductionBrief:
         mode_instruction = output_mode_instruction(output_mode)
+        creative_context = ""
+        if genre:
+            creative_context += f"\nジャンル: {genre}"
+        if mood:
+            creative_context += f"\n雰囲気: {mood}"
+        if color_tone:
+            creative_context += f"\n色調: {color_tone}"
+        if narration_style:
+            creative_context += f"\nナレーション文体: {narration_style}"
+        if target_platform:
+            creative_context += f"\n配信プラットフォーム: {target_platform}"
         prompt = f"""
 あなたはViMax風の動画制作ワークフローにおける企画整理エージェントです。
 ユーザーの入力を、短編映像の制作設計に使えるProductionBriefへ変換してください。
@@ -32,6 +43,7 @@ USER_INPUT: {user_input}
 映像スタイル: {style}
 想定尺: {duration_seconds}秒
 OUTPUT_MODE: {output_mode}
+{creative_context}
 """
         brief = self.provider.generate_structured(prompt, ProductionBrief)
         brief.audience = brief.audience or audience
@@ -117,11 +129,20 @@ class ShotDirectorAgent(Agent):
     def run(self, brief: ProductionBrief, scenes: SceneList, characters: CharacterList, rag: RAGStore) -> ShotList:
         context = rag.context_block(" ".join(scene.summary for scene in scenes.items), used_by=self.name, limit=8)
         mode_instruction = output_mode_instruction(brief.output_mode)
+        caption_instruction = ""
+        if brief.output_mode == "remotion":
+            style_guide = _narration_style_guide(brief.narration_style)
+            caption_instruction = f"""
+各ショットの narration_caption フィールドに、字幕として表示する短い文章を30〜60文字の日本語で入れてください。
+これはショットの映像説明ではなく、視聴者に伝えるストーリーの一文です。{style_guide}
+例: 「雨の降る夜の路地。小さなロボットが立ち止まり、遠くの音に耳を澄ませる。」
+"""
         prompt = f"""
 あなたはショット設計エージェントです。
 各シーンをショット単位に分け、カメラ、レンズ、動き、first frame、last frame、照明、音を具体化してください。
 RAG参照情報に含まれるキャラクターや世界観の一貫性を必ず守ってください。
 {mode_instruction}
+{caption_instruction}
 
 RAG参照情報:
 {context}
@@ -251,6 +272,16 @@ class ImageGenerationAgent(Agent):
             rag.add_image(image)
             generated.append(image)
         return generated
+
+
+def _narration_style_guide(narration_style: str) -> str:
+    guides = {
+        "third_person": "三人称の語り口で、情景と出来事を物語のように書いてください。",
+        "first_person": "主人公の一人称で、その場の気持ちや気づきを語るように書いてください。",
+        "dialogue": "キャラクターのセリフや掛け合いの形式で書いてください。",
+        "none": "",
+    }
+    return guides.get(narration_style, "絵本のように、やさしい語り口で情景と感情を伝える短い文にしてください。")
 
 
 def output_mode_instruction(output_mode: str) -> str:

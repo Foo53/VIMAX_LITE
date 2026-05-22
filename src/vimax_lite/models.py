@@ -18,6 +18,11 @@ class ProductionBrief(BaseModel):
     style: str = Field(default="cinematic", description="映像スタイル")
     duration_seconds: int = Field(default=60, description="想定尺")
     output_mode: Literal["standard", "remotion"] = Field(default="standard", description="出力モード")
+    genre: str = Field(default="", description="作品ジャンル")
+    mood: str = Field(default="", description="雰囲気・ムード")
+    color_tone: str = Field(default="", description="色調")
+    narration_style: str = Field(default="", description="ナレーション・字幕の文体")
+    target_platform: str = Field(default="", description="想定配信プラットフォーム")
     themes: list[str] = Field(default_factory=list, description="テーマ")
     visual_rules: list[str] = Field(default_factory=list, description="映像上の一貫性ルール")
     negative_constraints: list[str] = Field(default_factory=list, description="避けるべき表現")
@@ -65,6 +70,7 @@ class ShotPlan(BaseModel):
     lighting: str
     audio: str
     referenced_memory: list[str] = Field(default_factory=list)
+    narration_caption: str = Field(default="", description="Remotion字幕用の絵本風テキスト")
 
 
 class ImagePrompt(BaseModel):

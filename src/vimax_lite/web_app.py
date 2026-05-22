@@ -101,6 +101,72 @@ OUTPUT_MODE_OPTIONS = [
     {"value": "remotion", "label": "Remotion: 画像連結 + 字幕 + 読み上げ向け"},
 ]
 
+GENRE_OPTIONS = [
+    {"value": "", "label": "指定しない"},
+    {"value": "fantasy", "label": "ファンタジー"},
+    {"value": "slice_of_life", "label": "日常系"},
+    {"value": "documentary", "label": "ドキュメンタリー"},
+    {"value": "corporate", "label": "企業・PR"},
+    {"value": "horror", "label": "ホラー・サスペンス"},
+    {"value": "comedy", "label": "コメディ"},
+    {"value": "poetic", "label": "詩的・実験的"},
+]
+
+MOOD_OPTIONS = [
+    {"value": "", "label": "指定しない"},
+    {"value": "bright", "label": "明るい・希望"},
+    {"value": "dark", "label": "暗い・重厚"},
+    {"value": "nostalgic", "label": "ノスタルジック"},
+    {"value": "energetic", "label": "エネルギッシュ"},
+    {"value": "calm", "label": "穏やか・静謐"},
+    {"value": "mysterious", "label": "神秘的"},
+    {"value": "whimsical", "label": "ゆかい・不思議"},
+]
+
+COLOR_TONE_OPTIONS = [
+    {"value": "", "label": "指定しない"},
+    {"value": "warm", "label": "暖色系"},
+    {"value": "cool", "label": "寒色系"},
+    {"value": "monochrome", "label": "モノクロ"},
+    {"value": "vivid", "label": "ビビッド"},
+    {"value": "pastel", "label": "パステル"},
+    {"value": "muted", "label": "くすみ・アンティーク"},
+]
+
+NARRATION_STYLE_OPTIONS = [
+    {"value": "", "label": "絵本風（デフォルト）"},
+    {"value": "third_person", "label": "三人称ナレーション"},
+    {"value": "first_person", "label": "一人称（主人公の語り）"},
+    {"value": "dialogue", "label": "セリフ中心"},
+    {"value": "none", "label": "字幕なし"},
+]
+
+TARGET_PLATFORM_OPTIONS = [
+    {"value": "", "label": "指定しない（16:9）"},
+    {"value": "youtube", "label": "YouTube 横長（16:9）"},
+    {"value": "tiktok", "label": "TikTok 縦長（9:16）"},
+    {"value": "instagram_square", "label": "Instagram 正方形（1:1）"},
+    {"value": "instagram_reel", "label": "Instagram Reel（9:16）"},
+    {"value": "twitter", "label": "X/Twitter（16:9）"},
+]
+
+STYLE_OPTIONS = [
+    {"value": "cinematic", "label": "シネマティック"},
+    {"value": "anime", "label": "アニメ"},
+    {"value": "watercolor", "label": "水彩画風"},
+    {"value": "oil_painting", "label": "油絵風"},
+    {"value": "pixel_art", "label": "ピクセルアート"},
+    {"value": "photorealistic", "label": "フォトリアル"},
+    {"value": "flat_design", "label": "フラットデザイン"},
+    {"value": "3d_render", "label": "3Dレンダー"},
+    {"value": "stop_motion", "label": "ストップモーション風"},
+    {"value": "minimal", "label": "ミニマル"},
+    {"value": "retro", "label": "レトロ・ノスタルジー"},
+    {"value": "cyberpunk", "label": "サイバーパンク"},
+    {"value": "studio_ghibli", "label": "ジブリ風"},
+    {"value": "manga", "label": "漫画風"},
+]
+
 
 def create_app(output_root: Path = Path("outputs")) -> FastAPI:
     app = FastAPI(title="ViMax Lite Web UI")
@@ -120,6 +186,12 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 "model_options": MODEL_OPTIONS,
                 "duration_presets": DURATION_PRESETS,
                 "output_mode_options": OUTPUT_MODE_OPTIONS,
+                "genre_options": GENRE_OPTIONS,
+                "mood_options": MOOD_OPTIONS,
+                "color_tone_options": COLOR_TONE_OPTIONS,
+                "narration_style_options": NARRATION_STYLE_OPTIONS,
+                "target_platform_options": TARGET_PLATFORM_OPTIONS,
+                "style_options": STYLE_OPTIONS,
             },
         )
 
@@ -131,6 +203,11 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         style: str = Form("cinematic"),
         duration_seconds: int = Form(60),
         output_mode: str = Form("standard"),
+        genre: str = Form(""),
+        mood: str = Form(""),
+        color_tone: str = Form(""),
+        narration_style: str = Form(""),
+        target_platform: str = Form(""),
         provider: str = Form("mock"),
         model: str = Form("gemini-2.5-flash"),
     ) -> RedirectResponse:
@@ -145,6 +222,11 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 "style": style,
                 "duration_seconds": duration_seconds,
                 "output_mode": output_mode,
+                "genre": genre,
+                "mood": mood,
+                "color_tone": color_tone,
+                "narration_style": narration_style,
+                "target_platform": target_platform,
                 "provider_name": provider,
                 "model": model,
                 "output_root": output_root,
@@ -204,8 +286,19 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
 
     @app.post("/projects/{project}/render-video")
     def render_video(project: str) -> RedirectResponse:
-        render_timeline_with_remotion(project=project, output_root=output_root, repo_root=Path.cwd())
-        return RedirectResponse(f"/projects/{project}", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_render_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "output_root": output_root,
+                "repo_root": Path.cwd(),
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
     @app.get("/projects/{project}/shots", response_class=HTMLResponse)
     def shots_page(request: Request, project: str) -> HTMLResponse:
@@ -272,6 +365,11 @@ def _run_generation_job(
     style: str,
     duration_seconds: int,
     output_mode: str,
+    genre: str,
+    mood: str,
+    color_tone: str,
+    narration_style: str,
+    target_platform: str,
     provider_name: str,
     model: str,
     output_root: Path,
@@ -292,6 +390,11 @@ def _run_generation_job(
             style=style,
             duration_seconds=duration_seconds,
             output_mode=output_mode,
+            genre=genre,
+            mood=mood,
+            color_tone=color_tone,
+            narration_style=narration_style,
+            target_platform=target_platform,
             generate_images=False,
             image_model="gemini-2.5-flash-image",
             progress=progress,
@@ -310,6 +413,47 @@ def _run_generation_job(
         jobs.update(job_id, status="failed", stage="failed", message="Providerエラーで停止しました", error=str(exc))
     except Exception as exc:
         jobs.update(job_id, status="failed", stage="failed", message="予期しないエラーで停止しました", error=str(exc))
+
+
+def _run_render_job(
+    *,
+    job_id: str,
+    project: str,
+    output_root: Path,
+    repo_root: Path,
+) -> None:
+    jobs.update(job_id, status="running", stage="preparing", message="タイムラインを準備しています", current=0, total=1)
+
+    def progress(current: int, total: int, message: str) -> None:
+        jobs.update(job_id, stage="rendering", message=message, current=current, total=max(total, 1))
+
+    try:
+        result = render_timeline_with_remotion(
+            project=project,
+            output_root=output_root,
+            repo_root=repo_root,
+            progress_callback=progress,
+        )
+        if result.status == "success":
+            jobs.update(
+                job_id,
+                status="completed",
+                stage="completed",
+                message="動画の書き出しが完了しました",
+                current=result.stdout.count("Rendered") if result.stdout else 1,
+                total=result.stdout.count("Rendered") if result.stdout else 1,
+                result_url=f"/projects/{project}",
+            )
+        else:
+            jobs.update(
+                job_id,
+                status="failed",
+                stage="failed",
+                message="動画の書き出しに失敗しました",
+                error=result.stderr or "Remotionレンダリングエラー",
+            )
+    except Exception as exc:
+        jobs.update(job_id, status="failed", stage="failed", message="動画の書き出しに失敗しました", error=str(exc))
 
 
 def run_web_app(host: str, port: int, output_root: Path) -> None:

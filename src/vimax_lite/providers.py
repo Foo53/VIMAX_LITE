@@ -232,6 +232,14 @@ def _idea_from_prompt(prompt: str) -> str:
 def _mock_payload(name: str, prompt: str) -> dict:
     idea = _idea_from_prompt(prompt)
     is_remotion = "OUTPUT_MODE: remotion" in prompt or '"output_mode": "remotion"' in prompt or "Remotion assembly" in prompt
+    platform = ""
+    if "配信プラットフォーム: tiktok" in prompt:
+        platform = "tiktok"
+    elif "配信プラットフォーム: " in prompt:
+        for line in prompt.split("\n"):
+            if line.strip().startswith("配信プラットフォーム:"):
+                platform = line.split(":", 1)[1].strip()
+                break
     if name == "ProductionBrief":
         return {
             "title": "Rain Alley Overture",
@@ -240,6 +248,11 @@ def _mock_payload(name: str, prompt: str) -> dict:
             "style": "cinematic anime with grounded lighting",
             "duration_seconds": 60,
             "output_mode": "remotion" if is_remotion else "standard",
+            "genre": "fantasy",
+            "mood": "nostalgic",
+            "color_tone": "cool",
+            "narration_style": "third_person" if is_remotion else "",
+            "target_platform": platform,
             "themes": ["孤独", "好奇心", "創造性の目覚め"],
             "visual_rules": ["雨の反射", "暖かいネオン", "ロボットのシルエットを固定"]
             + (["各ショットは1枚絵として成立し、字幕とナレーションを載せやすい余白を残す"] if is_remotion else []),
@@ -311,9 +324,9 @@ def _mock_payload(name: str, prompt: str) -> dict:
     if name == "ShotList":
         return {
             "items": [
-                _shot("shot_001", "scene_001", 1, "雨とネオン反射の中に立つMiloのワイドショット", "low wide angle", "24mm", "slow dolly forward"),
-                _shot("shot_002", "scene_001", 2, "Miloがオルゴールを見つけるクローズアップ", "macro close-up", "50mm", "gentle rack focus"),
-                _shot("shot_003", "scene_002", 3, "Miloが旋律を鳴らすと路地の光が脈打つ", "medium orbit", "35mm", "slow semicircle"),
+                _shot("shot_001", "scene_001", 1, "雨とネオン反射の中に立つMiloのワイドショット", "low wide angle", "24mm", "slow dolly forward", is_remotion),
+                _shot("shot_002", "scene_001", 2, "Miloがオルゴールを見つけるクローズアップ", "macro close-up", "50mm", "gentle rack focus", is_remotion),
+                _shot("shot_003", "scene_002", 3, "Miloが旋律を鳴らすと路地の光が脈打つ", "medium orbit", "35mm", "slow semicircle", is_remotion),
             ]
         }
     if name == "PromptBundle":
@@ -354,7 +367,12 @@ def _mock_payload(name: str, prompt: str) -> dict:
     raise ProviderError(f"mock payload が未定義です: {name}. prompt={json.dumps(prompt[:200], ensure_ascii=False)}")
 
 
-def _shot(shot_id: str, scene_id: str, order: int, description: str, camera: str, lens: str, motion: str) -> dict:
+def _shot(shot_id: str, scene_id: str, order: int, description: str, camera: str, lens: str, motion: str, is_remotion: bool = False) -> dict:
+    captions = {
+        "shot_001": "雨の降る夜の路地。小さなロボットが立ち止まり、遠くの音に耳を澄ませる。",
+        "shot_002": "光る壊れたオルゴールを見つけた。不思議な音の模様が、心に響く。",
+        "shot_003": "旋律が路地に広がると、ネオンの光が優しく脈打ち始めた。",
+    }
     return {
         "shot_id": shot_id,
         "scene_id": scene_id,
@@ -368,4 +386,5 @@ def _shot(shot_id: str, scene_id: str, order: int, description: str, camera: str
         "lighting": "青い雨光と暖かい自販機の光",
         "audio": "雨音と遠いオルゴール",
         "referenced_memory": ["character:char_robot"],
+        "narration_caption": captions.get(shot_id, "") if is_remotion else "",
     }

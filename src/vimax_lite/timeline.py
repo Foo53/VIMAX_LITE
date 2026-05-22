@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import base64
 import json
+import re
 import subprocess
 from pathlib import Path
+from typing import Callable
 from urllib.parse import quote
 
 from pydantic import BaseModel, Field
 
-from vimax_lite.models import ProductionDesign, ProjectPaths
+from vimax_lite.models import ProductionDesign, ProjectPaths, ShotPlan
 
 
 class TimelineTransition(BaseModel):
@@ -79,18 +82,19 @@ def build_timeline_manifest(
                 image_src=_file_uri_or_none(image_path) if image_exists else None,
                 status="ready" if image_exists else "missing",
                 duration_seconds=duration,
-                caption=_caption_for_shot(shot.description),
+                caption=_caption_for_shot(shot),
                 narration=_narration_for_shot(shot.description, shot.audio, video_prompt.temporal_notes if video_prompt else ""),
                 motion=motion,
             )
         )
+    platform_w, platform_h = _platform_resolution(design.brief.target_platform)
     return TimelineManifest(
         project=project,
         title=design.brief.title,
         output_mode=design.brief.output_mode,
         fps=fps,
-        width=width,
-        height=height,
+        width=width if width != 1920 or not platform_w else platform_w,
+        height=height if height != 1080 or not platform_h else platform_h,
         shots=shots,
         todos=[
             "BGMトラックをtimeline_manifest.jsonへ追加し、Remotionで重ねる。",
@@ -113,6 +117,7 @@ def render_timeline_with_remotion(
     output_root: Path = Path("outputs"),
     repo_root: Path = Path("."),
     composition_id: str = "VimaxTimelineVideo",
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> VideoRenderResult:
     paths = ProjectPaths.for_project(project, output_root)
     manifest_path = paths.root / "timeline_manifest.json"
@@ -134,7 +139,10 @@ def render_timeline_with_remotion(
         str(manifest_path.resolve()),
     ]
     try:
-        result = subprocess.run(command, cwd=remotion_root, capture_output=True, text=True, timeout=900)
+        if progress_callback:
+            result = _run_with_progress(command, remotion_root, progress_callback)
+        else:
+            result = subprocess.run(command, cwd=remotion_root, capture_output=True, text=True, timeout=900)
     except FileNotFoundError as exc:
         return _write_render_report(
             paths.root,
@@ -158,6 +166,26 @@ def render_timeline_with_remotion(
     )
 
 
+def _run_with_progress(
+    command: list[str],
+    cwd: Path,
+    progress_callback: Callable[[int, int, str], None],
+) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    stdout_lines: list[str] = []
+    render_re = re.compile(r"Rendered\s+(\d+)/(\d+)")
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        stdout_lines.append(line.rstrip())
+        m = render_re.search(line)
+        if m:
+            current = int(m.group(1))
+            total = int(m.group(2))
+            progress_callback(current, total, f"フレーム {current}/{total} をレンダリング中")
+    proc.wait(timeout=900)
+    return subprocess.CompletedProcess(args=command, returncode=proc.returncode, stdout="\n".join(stdout_lines), stderr="")
+
+
 def _resolve_shot_image(paths: ProjectPaths, shot_id: str, index: int) -> Path | None:
     manual = paths.root / "images" / "manual" / f"{shot_id}.png"
     if manual.exists():
@@ -168,8 +196,19 @@ def _resolve_shot_image(paths: ProjectPaths, shot_id: str, index: int) -> Path |
     return manual
 
 
-def _caption_for_shot(description: str) -> str:
-    return description.strip().rstrip("。.")[:80]
+def _caption_for_shot(shot: ShotPlan) -> str:
+    if shot.narration_caption:
+        return shot.narration_caption.strip()[:80]
+    return shot.description.strip().rstrip("。.")[:80]
+
+
+def _platform_resolution(target_platform: str) -> tuple[int, int]:
+    mapping = {
+        "tiktok": (1080, 1920),
+        "instagram_reel": (1080, 1920),
+        "instagram_square": (1080, 1080),
+    }
+    return mapping.get(target_platform, (0, 0))
 
 
 def _narration_for_shot(description: str, audio: str, temporal_notes: str) -> str:
@@ -207,10 +246,13 @@ def _relative_or_none(root: Path, path: Path | None) -> str | None:
 
 
 def _file_uri_or_none(path: Path | None) -> str | None:
-    if path is None:
+    if path is None or not path.exists():
         return None
-    absolute = path.resolve()
-    return "file:///" + quote(str(absolute).replace("\\", "/"))
+    suffix = path.suffix.lower()
+    mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+    mime = mime_map.get(suffix, "image/png")
+    data = path.read_bytes()
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 def _write_render_report(root: Path, result: VideoRenderResult) -> VideoRenderResult:

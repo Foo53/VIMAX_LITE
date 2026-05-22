@@ -232,6 +232,7 @@ def _idea_from_prompt(prompt: str) -> str:
 def _mock_payload(name: str, prompt: str) -> dict:
     idea = _idea_from_prompt(prompt)
     is_remotion = "OUTPUT_MODE: remotion" in prompt or '"output_mode": "remotion"' in prompt or "Remotion assembly" in prompt
+    is_mv = "OUTPUT_MODE: mv" in prompt or '"output_mode": "mv"' in prompt or "Music Video" in prompt
     platform = ""
     if "配信プラットフォーム: tiktok" in prompt:
         platform = "tiktok"
@@ -247,7 +248,7 @@ def _mock_payload(name: str, prompt: str) -> dict:
             "audience": "general",
             "style": "cinematic anime with grounded lighting",
             "duration_seconds": 60,
-            "output_mode": "remotion" if is_remotion else "standard",
+            "output_mode": "mv" if is_mv else ("remotion" if is_remotion else "standard"),
             "genre": "fantasy",
             "mood": "nostalgic",
             "color_tone": "cool",
@@ -324,15 +325,18 @@ def _mock_payload(name: str, prompt: str) -> dict:
     if name == "ShotList":
         return {
             "items": [
-                _shot("shot_001", "scene_001", 1, "雨とネオン反射の中に立つMiloのワイドショット", "low wide angle", "24mm", "slow dolly forward", is_remotion),
-                _shot("shot_002", "scene_001", 2, "Miloがオルゴールを見つけるクローズアップ", "macro close-up", "50mm", "gentle rack focus", is_remotion),
-                _shot("shot_003", "scene_002", 3, "Miloが旋律を鳴らすと路地の光が脈打つ", "medium orbit", "35mm", "slow semicircle", is_remotion),
+                _shot("shot_001", "scene_001", 1, "雨とネオン反射の中に立つMiloのワイドショット", "low wide angle", "24mm", "slow dolly forward", is_remotion, is_mv),
+                _shot("shot_002", "scene_001", 2, "Miloがオルゴールを見つけるクローズアップ", "macro close-up", "50mm", "gentle rack focus", is_remotion, is_mv),
+                _shot("shot_003", "scene_002", 3, "Miloが旋律を鳴らすと路地の光が脈打つ", "medium orbit", "35mm", "slow semicircle", is_remotion, is_mv),
             ]
         }
     if name == "PromptBundle":
         shots = _mock_payload("ShotList", prompt)["items"]
         remotion_note = (
             "Remotion assembly instruction: use this still as a 4-6 second scene with slow Ken Burns motion, readable subtitle space, narration-friendly pacing, and a soft crossfade to the next shot."
+        )
+        mv_note = (
+            "MV mode: use this still as a music video scene with slow Ken Burns motion, lyrics subtitle overlay, and a soft crossfade synced to the music."
         )
         return {
             "image_prompts": [
@@ -348,13 +352,15 @@ def _mock_payload(name: str, prompt: str) -> dict:
             "video_prompts": [
                 {
                     "shot_id": shot["shot_id"],
-                    "prompt": f"{shot['description']} Start: {shot['first_frame']} End: {shot['last_frame']}. {remotion_note if is_remotion else ''}".strip(),
+                    "prompt": f"{shot['description']} Start: {shot['first_frame']} End: {shot['last_frame']}. {(remotion_note if is_remotion else mv_note) if (is_remotion or is_mv) else ''}".strip(),
                     "duration_seconds": 5,
-                    "camera_motion": "slow zoom or slow pan for Remotion still-image assembly" if is_remotion else shot["motion"],
+                    "camera_motion": ("slow zoom or slow pan for Remotion still-image assembly" if is_remotion else "slow zoom for MV still-image assembly") if (is_remotion or is_mv) else shot["motion"],
                     "temporal_notes": (
                         "Use the still image as a Remotion scene. Add a short Japanese caption, optional narration, ambient rain audio, and preserve character continuity across crossfades."
                         if is_remotion
-                        else "キャラクターの形状と濡れたポンチョを維持する。"
+                        else ("MV mode: lyrics subtitle overlay, preserve character continuity, sync visual mood to music sections."
+                              if is_mv
+                              else "キャラクターの形状と濡れたポンチョを維持する。")
                     ),
                 }
                 for shot in shots
@@ -364,15 +370,46 @@ def _mock_payload(name: str, prompt: str) -> dict:
         return {"issues": [{"severity": "low", "location": "shot_003", "issue": "オルゴールの琥珀色の光を明示すると連続性が強くなる。", "recommendation": "shot_003とプロンプトに琥珀色の光を追記する。"}]}
     if name == "RevisionResult":
         return {"notes": ["オルゴールの琥珀色の光を継続性メモとして追加する方針にしました。"]}
+    if name == "SunoMusicParamsSchema":
+        return {
+            "lyrics": (
+                "[Intro]\n雨音が降り注ぐ路地の静寂\n\n"
+                "[Verse 1]\n雨の路地に光る水たまり\n小さなロボットが立ち止まる\n"
+                "遠くで鳴る金属のメロディ\n心の奥に響く不思議な音\n\n"
+                "[Chorus]\n壊れたオルゴールが歌い始める\n"
+                "雨の粒が音符に変わる夜\n光と音が絡み合う路地で\n"
+                "小さな命が音楽を見つける\n\n"
+                "[Bridge]\n旋律が路地を染めていく\nネオンが優しく脈打つ\n"
+                "青い光と琥珀の光が\n一つの調べに溶けていく\n\n"
+                "[Chorus]\n壊れたオルゴールが歌い始める\n"
+                "雨の粒が音符に変わる夜\n光と音が絡み合う路地で\n"
+                "小さな命が音楽を見つける\n\n"
+                "[Outro]\n雨が止み、路地に朝が来る\nオルゴールの音はまだ響いている"
+            ),
+            "style": "cinematic electronic, ambient, melancholic, Japanese pop, atmospheric, gentle piano and synth",
+            "weirdness": 45,
+            "style_influence": 80,
+            "audio_influence": 60,
+        }
     raise ProviderError(f"mock payload が未定義です: {name}. prompt={json.dumps(prompt[:200], ensure_ascii=False)}")
 
 
-def _shot(shot_id: str, scene_id: str, order: int, description: str, camera: str, lens: str, motion: str, is_remotion: bool = False) -> dict:
-    captions = {
+def _shot(shot_id: str, scene_id: str, order: int, description: str, camera: str, lens: str, motion: str, is_remotion: bool = False, is_mv: bool = False) -> dict:
+    remotion_captions = {
         "shot_001": "雨の降る夜の路地。小さなロボットが立ち止まり、遠くの音に耳を澄ませる。",
         "shot_002": "光る壊れたオルゴールを見つけた。不思議な音の模様が、心に響く。",
         "shot_003": "旋律が路地に広がると、ネオンの光が優しく脈打ち始めた。",
     }
+    mv_captions = {
+        "shot_001": "雨の路地に光る水たまり / 小さなロボットが立ち止まる",
+        "shot_002": "壊れたオルゴールが歌い始める / 不思議な音の模様",
+        "shot_003": "旋律が路地を染めていく / ネオンが優しく脈打つ",
+    }
+    caption = ""
+    if is_mv:
+        caption = mv_captions.get(shot_id, "")
+    elif is_remotion:
+        caption = remotion_captions.get(shot_id, "")
     return {
         "shot_id": shot_id,
         "scene_id": scene_id,
@@ -386,5 +423,5 @@ def _shot(shot_id: str, scene_id: str, order: int, description: str, camera: str
         "lighting": "青い雨光と暖かい自販機の光",
         "audio": "雨音と遠いオルゴール",
         "referenced_memory": ["character:char_robot"],
-        "narration_caption": captions.get(shot_id, "") if is_remotion else "",
+        "narration_caption": caption,
     }

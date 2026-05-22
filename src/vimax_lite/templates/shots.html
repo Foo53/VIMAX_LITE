@@ -44,7 +44,10 @@
       {% endfor %}
     </div>
     <h3>ChatGPT貼り付け用プロンプト</h3>
-    <textarea class="copybox" readonly>{{ shot.manual_prompt }}</textarea>
+    <div class="copy-row">
+      <textarea class="copybox" readonly id="prompt-{{ shot.shot_id }}">{{ shot.manual_prompt }}</textarea>
+      <button type="button" class="button ghost copy-btn" data-copy-target="prompt-{{ shot.shot_id }}">コピー</button>
+    </div>
     <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/upload" enctype="multipart/form-data">
       <label>生成画像をアップロード</label>
       {% if shot.output_saved_path %}
@@ -96,6 +99,18 @@
         if (window.vimaxMakeImageDraggable) {
           window.vimaxMakeImageDraggable(image);
         }
+      });
+    });
+    document.querySelectorAll(".copy-btn[data-copy-target]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.dataset.copyTarget;
+        const el = document.getElementById(targetId);
+        if (!el) return;
+        navigator.clipboard.writeText(el.value || el.textContent).then(() => {
+          const orig = btn.textContent;
+          btn.textContent = "コピー済み";
+          setTimeout(() => { btn.textContent = orig; }, 2000);
+        });
       });
     });
   });

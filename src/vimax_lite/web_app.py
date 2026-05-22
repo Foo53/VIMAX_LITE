@@ -20,7 +20,7 @@ from vimax_lite.manual_workflow import (
     register_uploaded_file_bytes,
     register_uploaded_image,
 )
-from vimax_lite.models import ProjectPaths
+from vimax_lite.models import ProductionDesign, ProjectPaths, SunoMusicParams
 from vimax_lite.pipeline import run_idea_pipeline
 from vimax_lite.providers import ProviderError, make_provider
 from vimax_lite.timeline import build_timeline_manifest, render_timeline_with_remotion, write_timeline_manifest
@@ -99,6 +99,7 @@ DURATION_PRESETS = [15, 30, 45, 60, 90, 120, 180, 300]
 OUTPUT_MODE_OPTIONS = [
     {"value": "standard", "label": "標準: 動画生成API向け設計"},
     {"value": "remotion", "label": "Remotion: 画像連結 + 字幕 + 読み上げ向け"},
+    {"value": "mv", "label": "MV: Suno音楽生成 + 歌詞字幕付き動画"},
 ]
 
 GENRE_OPTIONS = [
@@ -275,6 +276,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 "workflow": workflow,
                 "timeline_exists": timeline_path.exists(),
                 "video_exists": video_path.exists(),
+                "is_mv": design.brief.output_mode == "mv",
             },
         )
 
@@ -352,6 +354,45 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
             await value.close()
         prepare_manual_image_workflow(project, output_root)
         return RedirectResponse(f"/projects/{project}/references", status_code=303)
+
+    @app.get("/projects/{project}/music", response_class=HTMLResponse)
+    def music_page(request: Request, project: str) -> HTMLResponse:
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        suno_params = design.suno_params
+        if not suno_params:
+            suno_params = SunoMusicParams()
+        return templates.TemplateResponse(request, "music.html", {"project": project, "design": design, "suno": suno_params})
+
+    @app.post("/projects/{project}/music/save")
+    async def save_music_params(request: Request, project: str) -> RedirectResponse:
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        form = await request.form()
+        design.suno_params = SunoMusicParams(
+            lyrics=str(form.get("lyrics", "")),
+            style=str(form.get("style", "")),
+            weirdness=int(str(form.get("weirdness", "50"))),
+            style_influence=int(str(form.get("style_influence", "80"))),
+            audio_influence=int(str(form.get("audio_influence", "50"))),
+        )
+        paths.design_json.write_text(design.model_dump_json(indent=2), encoding="utf-8")
+        return RedirectResponse(f"/projects/{project}/music", status_code=303)
+
+    @app.post("/projects/{project}/music/regenerate")
+    async def regenerate_music_params(request: Request, project: str) -> RedirectResponse:
+        from vimax_lite.agents import MusicAgent
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        form = await request.form()
+        message = str(form.get("message", ""))
+        provider_name = str(form.get("provider", "mock"))
+        model = str(form.get("model", "gemini-2.5-flash"))
+        provider = make_provider(provider_name, model, "gemini-2.5-flash-image")
+        suno_params = MusicAgent(provider).run(design.brief, message=message)
+        design.suno_params = suno_params
+        paths.design_json.write_text(design.model_dump_json(indent=2), encoding="utf-8")
+        return RedirectResponse(f"/projects/{project}/music", status_code=303)
 
     return app
 

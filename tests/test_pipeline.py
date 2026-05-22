@@ -337,6 +337,105 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(manifest.width, 1080)
             self.assertEqual(manifest.height, 1920)
 
+    def test_mv_mode_generates_suno_params(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テストMV",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "mv",
+                ]
+            )
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            self.assertEqual(design.brief.output_mode, "mv")
+            self.assertIsNotNone(design.suno_params)
+            self.assertTrue(design.suno_params.lyrics)
+            self.assertTrue(design.suno_params.style)
+            self.assertIn("[Verse", design.suno_params.lyrics)
+            self.assertIn("[Chorus", design.suno_params.lyrics)
+
+    def test_mv_mode_lyrics_in_captions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テストMV",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "mv",
+                ]
+            )
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            for shot in design.shots:
+                self.assertTrue(shot.narration_caption, f"{shot.shot_id} should have narration_caption in MV mode")
+
+    def test_mv_mode_image_prompts_generated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テストMV",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "mv",
+                ]
+            )
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            self.assertTrue(design.image_prompts)
+            self.assertTrue(design.video_prompts)
+            self.assertIn("MV", "\n".join(design.learning_notes))
+
+    def test_mv_timeline_has_lyrics_timeline(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root",
+                    temp,
+                    "idea2design",
+                    "--project",
+                    "demo",
+                    "--idea",
+                    "テストMV",
+                    "--provider",
+                    "mock",
+                    "--output-mode",
+                    "mv",
+                ]
+            )
+            manifest = build_timeline_manifest(project="demo", output_root=Path(temp))
+            self.assertEqual(manifest.output_mode, "mv")
+            self.assertTrue(manifest.lyrics_timeline)
+            for shot in manifest.shots:
+                self.assertIn(shot.shot_id, manifest.lyrics_timeline)
+                self.assertTrue(manifest.lyrics_timeline[shot.shot_id])
+
+    def test_suno_music_params_model_defaults(self) -> None:
+        from vimax_lite.models import SunoMusicParams
+        params = SunoMusicParams(lyrics="test")
+        self.assertEqual(params.weirdness, 50)
+        self.assertEqual(params.style_influence, 80)
+        self.assertEqual(params.audio_influence, 50)
+
 
 if __name__ == "__main__":
     unittest.main()

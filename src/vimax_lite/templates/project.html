@@ -6,6 +6,9 @@
     <h1>{{ design.brief.title }}</h1>
     <a class="button secondary" href="/projects/{{ project }}/references">参照画像</a>
     <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成</a>
+    {% if is_mv %}
+    <a class="button secondary" href="/projects/{{ project }}/music">音楽設定</a>
+    {% endif %}
   </div>
   <p>{{ design.brief.logline }}</p>
   <div class="grid">

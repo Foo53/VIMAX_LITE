@@ -17,7 +17,7 @@ class ProductionBrief(BaseModel):
     audience: str = Field(default="general", description="想定視聴者")
     style: str = Field(default="cinematic", description="映像スタイル")
     duration_seconds: int = Field(default=60, description="想定尺")
-    output_mode: Literal["standard", "remotion"] = Field(default="standard", description="出力モード")
+    output_mode: Literal["standard", "remotion", "mv"] = Field(default="standard", description="出力モード")
     genre: str = Field(default="", description="作品ジャンル")
     mood: str = Field(default="", description="雰囲気・ムード")
     color_tone: str = Field(default="", description="色調")
@@ -106,6 +106,14 @@ class GeneratedImage(BaseModel):
     created_at: str = Field(default_factory=now_iso)
 
 
+class SunoMusicParams(BaseModel):
+    lyrics: str = Field(description="Suno向けメタタグ付き歌詞")
+    style: str = Field(default="", description="SunoのStyle指定")
+    weirdness: int = Field(default=50, description="Suno Weirdness (0-100)")
+    style_influence: int = Field(default=80, description="Suno Style Influence (0-100)")
+    audio_influence: int = Field(default=50, description="Suno Audio Influence (0-100)")
+
+
 class RAGTraceItem(BaseModel):
     query: str
     results: list[str] = Field(default_factory=list)
@@ -124,6 +132,7 @@ class ProductionDesign(BaseModel):
     generated_images: list[GeneratedImage] = Field(default_factory=list)
     rag_trace: list[RAGTraceItem] = Field(default_factory=list)
     learning_notes: list[str] = Field(default_factory=list)
+    suno_params: SunoMusicParams | None = Field(default=None, description="MVモード時のSuno音楽生成パラメータ")
     created_at: str = Field(default_factory=now_iso)
 
 

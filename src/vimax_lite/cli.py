@@ -205,7 +205,7 @@ def _add_common_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--audience", default="general")
     parser.add_argument("--style", default="cinematic")
     parser.add_argument("--duration-seconds", type=int, default=60)
-    parser.add_argument("--output-mode", choices=["standard", "remotion"], default="standard")
+    parser.add_argument("--output-mode", choices=["standard", "remotion", "mv"], default="standard")
     parser.add_argument("--genre", default="")
     parser.add_argument("--mood", default="")
     parser.add_argument("--color-tone", default="")

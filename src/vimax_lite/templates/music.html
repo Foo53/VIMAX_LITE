@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}音楽設定 - {{ project }}{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1>音楽設定（Suno向けパラメータ）</h1>
+    <a class="button secondary" href="/projects/{{ project }}">戻る</a>
+  </div>
+  <p>{{ design.brief.logline }}</p>
+</section>
+
+<form method="post" action="/projects/{{ project }}/music/save">
+  <section class="panel">
+    <h2>Lyrics（メタタグ付き歌詞）</h2>
+    <p class="help">[Intro], [Verse 1], [Chorus], [Bridge], [Outro] 等のセクションタグを使って構造化します。Sunoにそのまま貼り付けられます。</p>
+    <textarea name="lyrics" rows="20" style="min-height:320px">{{ suno.lyrics }}</textarea>
+    <div class="copy-row">
+      <button type="button" class="button ghost copy-btn" data-copy-source="lyrics">歌詞をコピー</button>
+    </div>
+
+    <label>Style</label>
+    <input name="style" value="{{ suno.style }}">
+    <p class="help">Sunoが理解できる英語のジャンル・雰囲気記述（例: "cinematic electronic, ambient, melancholic"）</p>
+
+    <div class="inline-fields">
+      <div>
+        <label>Weirdness: <span id="weirdness-val">{{ suno.weirdness }}</span></label>
+        <input type="range" name="weirdness" min="0" max="100" value="{{ suno.weirdness }}" oninput="document.getElementById('weirdness-val').textContent=this.value">
+        <p class="help">創造性の度合い（0=保守的、100=実験的）</p>
+      </div>
+      <div>
+        <label>Style Influence: <span id="style-influence-val">{{ suno.style_influence }}</span></label>
+        <input type="range" name="style_influence" min="0" max="100" value="{{ suno.style_influence }}" oninput="document.getElementById('style-influence-val').textContent=this.value">
+        <p class="help">Style指定への忠実度</p>
+      </div>
+      <div>
+        <label>Audio Influence: <span id="audio-influence-val">{{ suno.audio_influence }}</span></label>
+        <input type="range" name="audio_influence" min="0" max="100" value="{{ suno.audio_influence }}" oninput="document.getElementById('audio-influence-val').textContent=this.value">
+        <p class="help">音響的特性の探求度</p>
+      </div>
+    </div>
+    <p><button type="submit">パラメータを保存</button></p>
+  </section>
+</form>
+
+<section class="panel">
+  <h2>再生成</h2>
+  <p class="muted">メッセージを入力して音楽設計エージェントにパラメータを再生成させます。現在の内容は上書きされます。</p>
+  <form method="post" action="/projects/{{ project }}/music/regenerate">
+    <textarea name="message" rows="3" placeholder="例: もりサビを長くして、全体的に明るい雰囲気に変更してください"></textarea>
+    <div class="inline-fields">
+      <div>
+        <label>Provider</label>
+        <select name="provider">
+          <option value="mock">mock</option>
+          <option value="gemini">gemini</option>
+        </select>
+      </div>
+      <div>
+        <label>Model</label>
+        <input name="model" value="gemini-2.5-flash">
+      </div>
+    </div>
+    <p><button type="submit">再生成</button></p>
+  </form>
+</section>
+{% endblock %}
+{% block head %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".copy-btn[data-copy-source]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sourceName = btn.dataset.copySource;
+        const el = document.querySelector(`[name="${sourceName}"]`);
+        if (!el) return;
+        navigator.clipboard.writeText(el.value).then(() => {
+          btn.textContent = "コピー済み";
+          setTimeout(() => { btn.textContent = "歌詞をコピー"; }, 2000);
+        });
+      });
+    });
+  });
+</script>
+{% endblock %}

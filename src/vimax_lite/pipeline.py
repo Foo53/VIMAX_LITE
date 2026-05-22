@@ -9,6 +9,7 @@ from vimax_lite.agents import (
     ContinuityCriticAgent,
     IdeationAgent,
     ImageGenerationAgent,
+    MusicAgent,
     PromptEngineerAgent,
     RevisionAgent,
     ScenePlannerAgent,
@@ -174,6 +175,11 @@ def _run_common(
         revision = RevisionAgent(provider).run(design, rag)
         design.learning_notes.extend(f"修正ループ: {note}" for note in revision.notes)
 
+    if brief.output_mode == "mv":
+        _notify(progress, "music", "音楽設計エージェントでSuno向けパラメータを生成しています", 8, 10)
+        suno_params = MusicAgent(provider).run(brief)
+        design.suno_params = suno_params
+
     if generate_images:
         _notify(progress, "images", "画像生成Providerで参考画像を生成しています", 9, 9)
         design.generated_images = ImageGenerationAgent(provider).run(
@@ -211,4 +217,6 @@ def _learning_notes(*, generate_images: bool, output_mode: str = "standard") -> 
         notes.append("マルチモーダル生成: 画像生成はスキップし、画像プロンプトだけを作成しました。")
     if output_mode == "remotion":
         notes.append("Remotionモード: 静止画を連結し、字幕と読み上げ音声を重ねる編集動画を作りやすい設計に寄せています。")
+    if output_mode == "mv":
+        notes.append("MVモード: Sunoで音楽を生成し、歌詞字幕付きのミュージックビデオを作る設計に寄せています。")
     return notes

@@ -9,6 +9,7 @@ from vimax_lite.models import (
     ScenePlan,
     ScriptBeat,
     ShotPlan,
+    SunoMusicParams,
     VideoPrompt,
 )
 
@@ -40,3 +41,11 @@ class ContinuityReport(BaseModel):
 
 class RevisionResult(BaseModel):
     notes: list[str] = Field(default_factory=list)
+
+
+class SunoMusicParamsSchema(BaseModel):
+    lyrics: str = Field(description="Suno向けメタタグ付き歌詞")
+    style: str = Field(default="", description="SunoのStyle指定")
+    weirdness: int = Field(default=50, ge=0, le=100, description="Weirdness (0-100)")
+    style_influence: int = Field(default=80, ge=0, le=100, description="Style Influence (0-100)")
+    audio_influence: int = Field(default=50, ge=0, le=100, description="Audio Influence (0-100)")

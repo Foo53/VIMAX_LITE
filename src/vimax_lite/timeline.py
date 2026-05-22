@@ -44,6 +44,7 @@ class TimelineManifest(BaseModel):
     width: int = 1920
     height: int = 1080
     shots: list[TimelineShot] = Field(default_factory=list)
+    lyrics_timeline: dict[str, list[str]] = Field(default_factory=dict)
     audio: dict[str, str | None] = Field(default_factory=lambda: {"bgm": None, "se": None, "narration": None})
     todos: list[str] = Field(default_factory=list)
 
@@ -88,6 +89,7 @@ def build_timeline_manifest(
             )
         )
     platform_w, platform_h = _platform_resolution(design.brief.target_platform)
+    lyrics_timeline = _build_lyrics_timeline(design) if design.brief.output_mode == "mv" else {}
     return TimelineManifest(
         project=project,
         title=design.brief.title,
@@ -96,6 +98,7 @@ def build_timeline_manifest(
         width=width if width != 1920 or not platform_w else platform_w,
         height=height if height != 1080 or not platform_h else platform_h,
         shots=shots,
+        lyrics_timeline=lyrics_timeline,
         todos=[
             "BGMトラックをtimeline_manifest.jsonへ追加し、Remotionで重ねる。",
             "SEトラックをショット単位で指定し、雨音やUI音などを追加する。",
@@ -209,6 +212,22 @@ def _platform_resolution(target_platform: str) -> tuple[int, int]:
         "instagram_square": (1080, 1080),
     }
     return mapping.get(target_platform, (0, 0))
+
+
+def _build_lyrics_timeline(design: ProductionDesign) -> dict[str, list[str]]:
+    if not design.suno_params or not design.suno_params.lyrics:
+        return {}
+    all_lines = [line for line in design.suno_params.lyrics.split("\n") if line.strip()]
+    shot_ids = [shot.shot_id for shot in sorted(design.shots, key=lambda s: s.order)]
+    if not shot_ids or not all_lines:
+        return {}
+    per_shot = max(1, len(all_lines) // len(shot_ids))
+    timeline: dict[str, list[str]] = {}
+    for i, shot_id in enumerate(shot_ids):
+        start = i * per_shot
+        end = start + per_shot if i < len(shot_ids) - 1 else len(all_lines)
+        timeline[shot_id] = all_lines[start:end]
+    return timeline
 
 
 def _narration_for_shot(description: str, audio: str, temporal_notes: str) -> str:

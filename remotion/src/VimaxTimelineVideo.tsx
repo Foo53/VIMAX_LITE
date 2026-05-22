@@ -29,11 +29,12 @@ export type TimelineManifest = {
   width: number;
   height: number;
   shots: TimelineShot[];
+  lyrics_timeline: Record<string, string[]>;
   audio: Record<string, string | null>;
   todos: string[];
 };
 
-export const VimaxTimelineVideo: React.FC<TimelineManifest> = ({title, shots, fps}) => {
+export const VimaxTimelineVideo: React.FC<TimelineManifest> = ({title, shots, fps, output_mode, lyrics_timeline}) => {
   if (!shots || shots.length === 0) {
     return (
       <AbsoluteFill style={{backgroundColor: '#111827', color: 'white', alignItems: 'center', justifyContent: 'center'}}>
@@ -41,13 +42,14 @@ export const VimaxTimelineVideo: React.FC<TimelineManifest> = ({title, shots, fp
       </AbsoluteFill>
     );
   }
+  const isMV = output_mode === 'mv';
 
   return (
     <AbsoluteFill style={{backgroundColor: '#05070a'}}>
       <Series>
         {shots.map((shot) => (
           <Series.Sequence key={shot.shot_id} durationInFrames={Math.max(1, Math.ceil(shot.duration_seconds * fps))}>
-            <ShotScene shot={shot} title={title} />
+            <ShotScene shot={shot} title={title} isMV={isMV} lyricsLines={lyrics_timeline?.[shot.shot_id] || []} />
           </Series.Sequence>
         ))}
       </Series>

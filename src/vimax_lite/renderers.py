@@ -51,6 +51,20 @@ def render_design(design: ProductionDesign) -> str:
     lines.extend([
         f"- テーマ: {', '.join(design.brief.themes)}",
         "",
+    ])
+    if design.suno_params:
+        lines.extend([
+            "## Suno音楽パラメータ",
+            f"- Style: {design.suno_params.style}",
+            f"- Weirdness: {design.suno_params.weirdness}",
+            f"- Style Influence: {design.suno_params.style_influence}",
+            f"- Audio Influence: {design.suno_params.audio_influence}",
+            "",
+            "### Lyrics",
+            design.suno_params.lyrics,
+            "",
+        ])
+    lines.extend([
         "## キャラクター",
     ])
     for character in design.characters:

@@ -8,15 +8,16 @@
     <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成へ</a>
   </div>
   <p class="muted">まずキャラクター参照画像をChatGPTで生成し、ここへアップロードします。以降のショットで添付参照として使います。</p>
-  <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。保存前に選択中プレビューを確認できます。</p>
+  <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。</p>
   <p class="muted">保存済み画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
 <form id="batch-reference-form" method="post" action="/projects/{{ project }}/references/upload-batch" enctype="multipart/form-data"></form>
+<div id="refs-list">
 {% for item in workflow.references.characters %}
   <section class="panel">
     <h2>{{ item.character.name }}</h2>
     {% for prompt in item.prompts %}
-      <div class="panel">
+      <div class="panel" id="ref-{{ prompt.reference_id }}">
         <div class="toolbar">
           <h3>{{ prompt.reference_id }}</h3>
           {% if prompt.saved %}
@@ -25,7 +26,10 @@
             <span class="badge warn">未保存</span>
           {% endif %}
         </div>
-        <textarea class="copybox" readonly>{{ prompt.prompt }}</textarea>
+        <div class="copy-row">
+          <textarea class="copybox" readonly id="ref-prompt-{{ prompt.reference_id }}">{{ prompt.prompt }}</textarea>
+          <button type="button" class="button ghost copy-btn" data-copy-target="ref-prompt-{{ prompt.reference_id }}">コピー</button>
+        </div>
         <div class="preview-grid">
           <div>
             <label>保存済み画像</label>
@@ -48,12 +52,13 @@
         <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/upload" enctype="multipart/form-data">
           <label>この画像だけ保存</label>
           <input type="file" name="file" accept="image/*" required data-preview-target="{{ prompt.reference_id }}">
-          <p><button type="submit">この画像だけ保存</button></p>
+          <p style="margin-top:8px"><button type="submit">この画像だけ保存</button></p>
         </form>
       </div>
     {% endfor %}
   </section>
 {% endfor %}
+</div>
   <section class="panel">
     <button form="batch-reference-form" type="submit">選択した参照画像を一括保存</button>
   </section>

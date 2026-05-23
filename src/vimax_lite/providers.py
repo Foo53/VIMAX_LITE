@@ -373,23 +373,24 @@ def _mock_payload(name: str, prompt: str) -> dict:
     if name == "SunoMusicParamsSchema":
         return {
             "lyrics": (
-                "[Intro]\n雨音が降り注ぐ路地の静寂\n\n"
-                "[Verse 1]\n雨の路地に光る水たまり\n小さなロボットが立ち止まる\n"
+                "[Intro: gentle synth pad, rain ambience]\n\n"
+                "[Verse 1: soft vocals, piano]\n雨の路地に光る水たまり\n小さなロボットが立ち止まる\n"
                 "遠くで鳴る金属のメロディ\n心の奥に響く不思議な音\n\n"
-                "[Chorus]\n壊れたオルゴールが歌い始める\n"
+                "[Chorus: powerful vocals, full band]\n壊れたオルゴールが歌い始める\n"
                 "雨の粒が音符に変わる夜\n光と音が絡み合う路地で\n"
                 "小さな命が音楽を見つける\n\n"
-                "[Bridge]\n旋律が路地を染めていく\nネオンが優しく脈打つ\n"
+                "[Bridge: stripped down, strings]\n旋律が路地を染めていく\nネオンが優しく脈打つ\n"
                 "青い光と琥珀の光が\n一つの調べに溶けていく\n\n"
-                "[Chorus]\n壊れたオルゴールが歌い始める\n"
+                "[Chorus: powerful vocals, full band]\n壊れたオルゴールが歌い始める\n"
                 "雨の粒が音符に変わる夜\n光と音が絡み合う路地で\n"
                 "小さな命が音楽を見つける\n\n"
-                "[Outro]\n雨が止み、路地に朝が来る\nオルゴールの音はまだ響いている"
+                "[Outro: fade out, piano only]\n雨が止み、路地に朝が来る\nオルゴールの音はまだ響いている\n\n"
+                "[End]"
             ),
-            "style": "cinematic electronic, ambient, melancholic, Japanese pop, atmospheric, gentle piano and synth",
+            "style": "cinematic electronic, mid-tempo, synth and piano, soft female vocals, atmospheric, melancholic",
             "weirdness": 45,
             "style_influence": 80,
-            "audio_influence": 60,
+            "audio_influence": 50,
         }
     raise ProviderError(f"mock payload が未定義です: {name}. prompt={json.dumps(prompt[:200], ensure_ascii=False)}")
 

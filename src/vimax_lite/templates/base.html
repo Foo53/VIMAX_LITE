@@ -6,52 +6,79 @@
   <title>{% block title %}ViMax Lite{% endblock %}</title>
   <style>
     :root {
-      color-scheme: light;
-      --bg: #f6f7f9;
-      --panel: #ffffff;
-      --line: #d7dce2;
-      --text: #17202a;
-      --muted: #64748b;
-      --accent: #0f766e;
-      --accent-soft: #d9f3ef;
-      --warn: #b45309;
-      --bad: #b91c1c;
+      color-scheme: dark;
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-hover: #1c2128;
+      --line: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #2dd4bf;
+      --accent-soft: #1a3a36;
+      --accent-hover: #14b8a6;
+      --warn: #d97706;
+      --warn-soft: #422006;
+      --bad: #ef4444;
+      --bad-soft: #450a0a;
+      --input-bg: #0d1117;
+      --input-border: #30363d;
     }
     body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
-    header { background: #111827; color: white; padding: 14px 24px; display: flex; align-items: center; gap: 18px; }
-    header a { color: white; text-decoration: none; font-weight: 600; }
-    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { background: #010409; color: white; padding: 16px 28px; display: flex; align-items: center; gap: 20px; border-bottom: 1px solid var(--line); }
+    header a { color: #e6edf3; text-decoration: none; font-weight: 700; letter-spacing: -0.01em; transition: color .15s; }
+    header a:hover { color: var(--accent); }
+    main { max-width: 1200px; margin: 0 auto; padding: 28px; }
+    h1 { font-size: 22px; margin: 0 0 8px; font-weight: 800; letter-spacing: -0.02em; }
+    h2 { font-size: 17px; margin: 0 0 8px; font-weight: 700; color: var(--text); }
+    h3 { font-size: 15px; margin: 0 0 6px; font-weight: 650; color: var(--muted); }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px; transition: border-color .15s; }
+    .panel:hover { border-color: #3d444d; }
     .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    label { display: block; font-weight: 650; margin: 12px 0 6px; }
-    input, textarea, select { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: inherit; background: white; }
+    label { display: block; font-weight: 650; margin: 14px 0 6px; color: var(--text); }
+    input, textarea, select { width: 100%; box-sizing: border-box; border: 1px solid var(--input-border); border-radius: 8px; padding: 10px 12px; font: inherit; background: var(--input-bg); color: var(--text); transition: border-color .15s; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
     textarea { min-height: 120px; resize: vertical; }
-    button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 6px; padding: 10px 14px; background: var(--accent); color: white; text-decoration: none; font-weight: 700; cursor: pointer; }
-    .button.secondary { background: #334155; }
-    .button.ghost { background: #e2e8f0; color: var(--text); }
+    button, .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 8px; padding: 10px 16px; background: var(--accent); color: #0d1117; text-decoration: none; font-weight: 700; cursor: pointer; transition: background .15s, transform .1s; }
+    button:hover, .button:hover { background: var(--accent-hover); }
+    button:active, .button:active { transform: scale(0.97); }
+    .button.secondary { background: #21262d; color: var(--text); border: 1px solid var(--line); }
+    .button.secondary:hover { background: #30363d; }
+    .button.ghost { background: #21262d; color: var(--muted); }
+    .button.ghost:hover { background: #30363d; color: var(--text); }
     .muted { color: var(--muted); }
     .help { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
     .inline-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
     .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .preset-row button { padding: 7px 10px; font-size: 13px; }
-    .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 12px 0; }
-    .image-preview { border: 1px solid var(--line); border-radius: 8px; min-height: 160px; background: #f8fafc; display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--muted); font-size: 13px; }
+    .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 14px 0; }
+    .image-preview { border: 2px dashed var(--line); border-radius: 10px; min-height: 160px; background: var(--panel); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--muted); font-size: 13px; transition: border-color .15s; }
+    .image-preview:hover { border-color: var(--accent); }
+    .image-preview.drop-active { border-color: var(--accent); background: var(--accent-soft); }
     .image-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
     .draggable-asset { cursor: grab; }
     .draggable-asset:active { cursor: grabbing; }
-    .stat { border-left: 4px solid var(--accent); padding-left: 12px; }
-    .progress { height: 14px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+    .stat { border-left: 3px solid var(--accent); padding-left: 14px; }
+    .stat strong { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .progress { height: 14px; border-radius: 999px; background: #21262d; overflow: hidden; }
     .progress > div { height: 100%; width: 0%; background: var(--accent); transition: width .25s ease; }
-    .badge { display: inline-block; background: var(--accent-soft); color: #134e4a; border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 700; }
-    .badge.warn { background: #fef3c7; color: var(--warn); }
-    .badge.bad { background: #fee2e2; color: var(--bad); }
-    pre, textarea.copybox { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+    .badge { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+    .badge.bad { background: var(--bad-soft); color: var(--bad); }
+    pre, textarea.copybox { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; line-height: 1.5; }
     .copy-row { display: flex; gap: 8px; align-items: flex-start; }
     .copy-row textarea { flex: 1; }
     .copy-row .copy-btn { flex-shrink: 0; margin-top: 4px; }
     .shot { margin-bottom: 16px; }
     .refs li { margin: 4px 0; }
+    ul { list-style: none; padding: 0; }
+    ul li { padding: 6px 0; }
+    ul li a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    ul li a:hover { text-decoration: underline; }
+    a { color: var(--accent); }
+    input[type="range"] { -webkit-appearance: none; appearance: none; background: var(--line); height: 6px; border-radius: 999px; border: none; padding: 0; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+    audio { width: 100%; margin-top: 8px; border-radius: 8px; }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -120,10 +147,58 @@
         void cacheImageFile(image);
       };
 
+      const initCopyButtons = () => {
+        document.querySelectorAll(".copy-btn[data-copy-target]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const targetId = btn.dataset.copyTarget;
+            const el = document.getElementById(targetId);
+            if (!el) return;
+            navigator.clipboard.writeText(el.value || el.textContent).then(() => {
+              const orig = btn.textContent;
+              btn.textContent = "コピー済み";
+              btn.style.background = "var(--accent)";
+              btn.style.color = "#0d1117";
+              setTimeout(() => { btn.textContent = orig; btn.style.background = ""; btn.style.color = ""; }, 2000);
+            });
+          });
+        });
+      };
+
+      const initDropZones = () => {
+        document.querySelectorAll("[data-preview-for]").forEach((zone) => {
+          const targetId = zone.dataset.previewFor;
+          const input = document.querySelector(`input[type="file"][data-preview-target="${targetId}"]`);
+          if (!input) return;
+          zone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            zone.classList.add("drop-active");
+          });
+          zone.addEventListener("dragleave", () => {
+            zone.classList.remove("drop-active");
+          });
+          zone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            zone.classList.remove("drop-active");
+            const file = e.dataTransfer?.files?.[0];
+            if (!file) return;
+            const accept = input.getAttribute("accept") || "";
+            if (accept.includes("image/") && !file.type.startsWith("image/")) return;
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            input.dispatchEvent(new Event("change"));
+          });
+        });
+      };
+
       document.addEventListener("DOMContentLoaded", () => {
         document.querySelectorAll("img[data-draggable-asset='true']").forEach(makeImageDraggable);
+        initCopyButtons();
+        initDropZones();
       });
       window.vimaxMakeImageDraggable = makeImageDraggable;
+      window.vimaxInitCopyButtons = initCopyButtons;
+      window.vimaxInitDropZones = initDropZones;
     })();
   </script>
 </body>

@@ -257,11 +257,25 @@ class MusicAgent(Agent):
 {regeneration}
 
 以下の形式で出力してください:
-- lyrics: Suno向けのメタタグ付き歌詞。[Intro], [Verse 1], [Chorus], [Bridge], [Outro] 等のセクションタグを使って構造化してください。歌詞は日本語で、映像の世界観に合う詩的な内容にしてください。想定尺{brief.duration_seconds}秒に収まる長さにしてください（概ね1行あたり3秒で計算）。
-- style: Sunoが理解できる英語のジャンル・雰囲気記述（例: "cinematic electronic, ambient, melancholic, Japanese pop"）
-- weirdness: 創造性の度合い 0-100（保守的〜実験的）
-- style_influence: Style指定への忠実度 0-100
-- audio_influence: 音響的特性の探求度 0-100
+
+- lyrics: Suno向けのメタタグ付き歌詞。以下のルールに従ってください:
+  - セクションタグ: [Intro], [Verse 1], [Pre-Chorus], [Chorus], [Post-Chorus], [Bridge], [Outro], [End] を適切に使い分けて構造化する。短い尺（60秒以下）では [Pre-Chorus], [Post-Chorus] は省略してよい。
+  - コロン構文で演出を指定: [Verse 1: soft vocals, piano], [Chorus: powerful vocals, full band] のようにセクションタグに続けてボーカルや楽器の指定を記述する。
+  - ボーカルタグ: [Male Vocal], [Female Vocal], [Whisper], [Harmonies] 等を適宜使用。
+  - インストゥルメンタルタグ: [Piano], [Synth], [Acoustic Guitar], [Strings] 等を適宜使用。
+  - 改行ルール: 改行は「息継ぎ」を意味する。セクション間は空行で区切る。
+  - 最後に [End] タグを置き、曲の終了を明示する（トレイル音防止）。
+  - 歌詞は日本語で、映像の世界観に合う詩的な内容にする。
+  - 想定尺{brief.duration_seconds}秒に収まる長さにする（概ね1行あたり3秒で計算）。
+
+- style: Sunoが理解できる英語のStyle指定。以下のフォーマットで4-7個の記述子をカンマ区切りで記述（120文字以内）:
+  [Genre], [Tempo/Energy], [Key Instruments], [Vocal Style], [Production Quality], [Mood]
+  例: "cinematic electronic, mid-tempo, synth and piano, soft female vocals, polished, melancholic"
+  例: "J-Pop, upbeat, electric guitar and synth, bright female vocals, polished, cheerful"
+
+- weirdness: 創造性の度合い 0-100（50=標準、低いほど保守的、高いほど実験的）
+- style_influence: Style指定への忠実度 0-100（高いほどStyleに厳密に従う）
+- audio_influence: 音響的探求度 0-100（音声アップロードがない場合は50固定でよい）
 """
         result = self.provider.generate_structured(prompt, SunoMusicParamsSchema)
         return SunoMusicParams(

@@ -15,7 +15,7 @@
   <p class="muted">表示されている参照画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
 {% for shot in reference_plan.shots %}
-  <section class="panel shot">
+  <section class="panel shot" id="shot-{{ shot.shot_id }}">
     <div class="toolbar">
       <h2>{{ shot.shot_id }}</h2>
       {% if shot.status == "generated" %}
@@ -99,18 +99,6 @@
         if (window.vimaxMakeImageDraggable) {
           window.vimaxMakeImageDraggable(image);
         }
-      });
-    });
-    document.querySelectorAll(".copy-btn[data-copy-target]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const targetId = btn.dataset.copyTarget;
-        const el = document.getElementById(targetId);
-        if (!el) return;
-        navigator.clipboard.writeText(el.value || el.textContent).then(() => {
-          const orig = btn.textContent;
-          btn.textContent = "コピー済み";
-          setTimeout(() => { btn.textContent = orig; }, 2000);
-        });
       });
     });
   });

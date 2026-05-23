@@ -322,7 +322,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         register_uploaded_image(project, shot_id, temp_path, output_root=output_root, kind="shot")
         temp_path.unlink(missing_ok=True)
         prepare_manual_image_workflow(project, output_root)
-        return RedirectResponse(f"/projects/{project}/shots", status_code=303)
+        return RedirectResponse(f"/projects/{project}/shots#shot-{shot_id}", status_code=303)
 
     @app.get("/projects/{project}/references", response_class=HTMLResponse)
     def references_page(request: Request, project: str) -> HTMLResponse:
@@ -337,7 +337,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         register_uploaded_image(project, reference_id, temp_path, output_root=output_root, kind="reference")
         temp_path.unlink(missing_ok=True)
         prepare_manual_image_workflow(project, output_root)
-        return RedirectResponse(f"/projects/{project}/references", status_code=303)
+        return RedirectResponse(f"/projects/{project}/references#ref-{reference_id}", status_code=303)
 
     @app.post("/projects/{project}/references/upload-batch")
     async def upload_reference_images_batch(request: Request, project: str) -> RedirectResponse:
@@ -353,7 +353,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 register_uploaded_file_bytes(project, reference_id, data, output_root=output_root, kind="reference")
             await value.close()
         prepare_manual_image_workflow(project, output_root)
-        return RedirectResponse(f"/projects/{project}/references", status_code=303)
+        return RedirectResponse(f"/projects/{project}/references#refs-list", status_code=303)
 
     @app.get("/projects/{project}/music", response_class=HTMLResponse)
     def music_page(request: Request, project: str) -> HTMLResponse:
@@ -362,7 +362,8 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         suno_params = design.suno_params
         if not suno_params:
             suno_params = SunoMusicParams()
-        return templates.TemplateResponse(request, "music.html", {"project": project, "design": design, "suno": suno_params})
+        audio_url = f"/files/{project}/{suno_params.audio_path}" if suno_params.audio_path else None
+        return templates.TemplateResponse(request, "music.html", {"project": project, "design": design, "suno": suno_params, "audio_url": audio_url, "model_options": MODEL_OPTIONS})
 
     @app.post("/projects/{project}/music/save")
     async def save_music_params(request: Request, project: str) -> RedirectResponse:
@@ -393,6 +394,23 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         design.suno_params = suno_params
         paths.design_json.write_text(design.model_dump_json(indent=2), encoding="utf-8")
         return RedirectResponse(f"/projects/{project}/music", status_code=303)
+
+    @app.post("/projects/{project}/music/upload-audio")
+    async def upload_music_audio(project: str, file: UploadFile = File(...)) -> RedirectResponse:
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        music_dir = paths.root / "music"
+        music_dir.mkdir(parents=True, exist_ok=True)
+        data = await file.read()
+        ext = Path(file.filename or "audio.mp3").suffix or ".mp3"
+        audio_filename = f"bgm{ext}"
+        (music_dir / audio_filename).write_bytes(data)
+        if design.suno_params:
+            design.suno_params.audio_path = f"music/{audio_filename}"
+        else:
+            design.suno_params = SunoMusicParams(audio_path=f"music/{audio_filename}")
+        paths.design_json.write_text(design.model_dump_json(indent=2), encoding="utf-8")
+        return RedirectResponse(f"/projects/{project}/music#audio-section", status_code=303)
 
     return app
 

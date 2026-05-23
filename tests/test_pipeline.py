@@ -361,6 +361,8 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(design.suno_params.style)
             self.assertIn("[Verse", design.suno_params.lyrics)
             self.assertIn("[Chorus", design.suno_params.lyrics)
+            self.assertIn("[End]", design.suno_params.lyrics)
+            self.assertTrue(any(":" in line for line in design.suno_params.lyrics.split("\n") if line.startswith("[")))
 
     def test_mv_mode_lyrics_in_captions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -435,6 +437,31 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(params.weirdness, 50)
         self.assertEqual(params.style_influence, 80)
         self.assertEqual(params.audio_influence, 50)
+        self.assertIsNone(params.audio_path)
+
+    def test_music_audio_upload_saves_file(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "テストMV", "--provider", "mock",
+                    "--output-mode", "mv",
+                ]
+            )
+            client = TestClient(create_app(Path(temp)))
+            response = client.post(
+                "/projects/demo/music/upload-audio",
+                files={"file": ("bgm.mp3", b"fake-mp3-data", "audio/mpeg")},
+            )
+            self.assertEqual(response.status_code, 200)
+            audio_path = Path(temp) / "demo" / "music" / "bgm.mp3"
+            self.assertTrue(audio_path.exists())
+            self.assertEqual(audio_path.read_bytes(), b"fake-mp3-data")
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            self.assertEqual(design.suno_params.audio_path, "music/bgm.mp3")
 
 
 if __name__ == "__main__":

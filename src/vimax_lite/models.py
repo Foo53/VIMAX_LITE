@@ -112,6 +112,7 @@ class SunoMusicParams(BaseModel):
     weirdness: int = Field(default=50, description="Suno Weirdness (0-100)")
     style_influence: int = Field(default=80, description="Suno Style Influence (0-100)")
     audio_influence: int = Field(default=50, description="Suno Audio Influence (0-100)")
+    audio_path: str | None = Field(default=None, description="保存済み音楽ファイルの相対パス")
 
 
 class RAGTraceItem(BaseModel):

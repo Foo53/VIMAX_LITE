@@ -7,6 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -15,7 +16,7 @@ from vimax_lite.manual_workflow import build_character_reference_sheet, build_ma
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
 from vimax_lite.timeline import build_timeline_manifest
-from vimax_lite.web_app import create_app
+from vimax_lite.web_app import _dimensions_for_aspect_ratio, _run_sdxl_job, create_app, jobs
 
 
 class PipelineTest(unittest.TestCase):
@@ -531,6 +532,146 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(design.song_sections)
             self.assertIsNotNone(design.mv_visual_plan)
             self.assertIn("MV再設計", "\n".join(design.learning_notes))
+
+    def test_sdxl_job_saves_candidate_without_overwriting_adopted_shot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "雨の中でロボットが音楽を聞く", "--provider", "mock",
+                ]
+            )
+            root = Path(temp) / "demo"
+            adopted = root / "images" / "manual" / "shot_001.png"
+            adopted.parent.mkdir(parents=True, exist_ok=True)
+            adopted.write_bytes(b"adopted-image")
+            reference = root / "references" / "character_char_robot_front.png"
+            reference.parent.mkdir(parents=True, exist_ok=True)
+            reference.write_bytes(b"reference-image")
+
+            job = jobs.create("demo")
+
+            def fake_generate_image(**kwargs: object) -> Path:
+                output_path = Path(str(kwargs["output_path"]))
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"candidate-image")
+                return output_path
+
+            with (
+                patch(
+                    "vimax_lite.sdxl_generator.runtime_status",
+                    return_value={"available": True, "device": "test", "reference_support": True, "message": "ok"},
+                ),
+                patch("vimax_lite.sdxl_generator.generate_image", side_effect=fake_generate_image) as generate_image,
+            ):
+                _run_sdxl_job(
+                    job_id=job.id,
+                    project="demo",
+                    items=[
+                        {
+                            "id": "shot_001",
+                            "prompt": "A cinematic still",
+                            "kind": "shot",
+                            "reference_paths": [str(reference)],
+                            "width": 1344,
+                            "height": 768,
+                        }
+                    ],
+                    return_page="/projects/demo/shots",
+                    output_root=Path(temp),
+                )
+
+            candidate = root / "images" / "sdxl_candidates" / "shot" / "shot_001.png"
+            metadata = json.loads(candidate.with_suffix(".json").read_text(encoding="utf-8"))
+            self.assertEqual(adopted.read_bytes(), b"adopted-image")
+            self.assertEqual(candidate.read_bytes(), b"candidate-image")
+            self.assertEqual(metadata["model"], "sdxl-local-ip-adapter")
+            self.assertEqual(metadata["width"], 1344)
+            self.assertEqual(metadata["height"], 768)
+            self.assertEqual(generate_image.call_args.kwargs["reference_paths"], [reference])
+            self.assertEqual(jobs.get(job.id).status, "completed")
+
+    def test_adopting_sdxl_candidate_promotes_it_to_shot_image(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "雨の中でロボットが音楽を聞く", "--provider", "mock",
+                ]
+            )
+            root = Path(temp) / "demo"
+            candidate = root / "images" / "sdxl_candidates" / "shot" / "shot_001.png"
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            candidate.write_bytes(b"approved-candidate")
+            candidate.with_suffix(".json").write_text(
+                json.dumps(
+                    {
+                        "prompt": "selected prompt",
+                        "reference_paths": ["references/character_char_robot_front.png"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            response = TestClient(create_app(Path(temp))).post("/projects/demo/shots/shot_001/adopt-sdxl")
+
+            self.assertEqual(response.status_code, 200)
+            adopted = root / "images" / "manual" / "shot_001.png"
+            self.assertEqual(adopted.read_bytes(), b"approved-candidate")
+            manifest = json.loads((root / "images" / "image_manifest.json").read_text(encoding="utf-8"))
+            record = next(item for item in manifest["images"] if item["shot_id"] == "shot_001")
+            self.assertEqual(record["model"], "sdxl-local-ip-adapter")
+
+    def test_sdxl_unavailable_reports_failed_job_instead_of_hanging(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            job = jobs.create("demo")
+            with patch(
+                "vimax_lite.sdxl_generator.runtime_status",
+                return_value={"available": False, "device": "unavailable", "reference_support": False, "message": "依存関係が未導入です"},
+            ):
+                _run_sdxl_job(
+                    job_id=job.id,
+                    project="demo",
+                    items=[{"id": "shot_001", "prompt": "test", "kind": "shot"}],
+                    return_page="/projects/demo/shots",
+                    output_root=Path(temp),
+                )
+
+            failed_job = jobs.get(job.id)
+            self.assertEqual(failed_job.status, "failed")
+            self.assertIn("依存関係が未導入", failed_job.error)
+
+    def test_sdxl_dimensions_keep_cinematic_aspect_ratio(self) -> None:
+        self.assertEqual(_dimensions_for_aspect_ratio("16:9"), (1344, 768))
+        self.assertEqual(_dimensions_for_aspect_ratio("2.35:1"), (1536, 640))
+
+    def test_reference_page_renders_sdxl_candidate_and_adopt_action(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "雨の中でロボットが音楽を聞く", "--provider", "mock",
+                ]
+            )
+            candidate = Path(temp) / "demo" / "images" / "sdxl_candidates" / "reference" / "character_char_robot_front.png"
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            candidate.write_bytes(b"candidate")
+            with patch(
+                "vimax_lite.web_app._sdxl_status",
+                return_value={"available": True, "device": "CUDA (test)", "reference_support": True, "message": "準備完了"},
+            ):
+                response = TestClient(create_app(Path(temp))).get("/projects/demo/references")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("SDXL候補画像", response.text)
+            self.assertIn("この候補を参照画像として採用", response.text)
 
 
 if __name__ == "__main__":

@@ -6,11 +6,15 @@
     <h1>キャラクター参照シート</h1>
     <a class="button secondary" href="/projects/{{ project }}">戻る</a>
     <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成へ</a>
-    <form method="post" action="/projects/{{ project }}/references/generate-all" style="display:inline">
-      <button type="submit" class="button secondary">SDXLで一括生成</button>
-    </form>
+    {% if sdxl_status.available %}
+      <span class="badge">{{ sdxl_status.device }}</span>
+    {% else %}
+      <span class="badge warn">SDXL未準備</span>
+    {% endif %}
   </div>
-  <p class="muted">まずキャラクター参照画像をChatGPTで生成し、ここへアップロードします。以降のショットで添付参照として使います。「SDXLで生成」ボタンでローカルSDXLモデルによる自動生成も可能です。</p>
+  <p class="muted">まずキャラクター参照画像を生成し、採用した画像を以降のショットで添付参照として使います。SDXLは候補画像を作成し、確認後に採用する方式です。</p>
+  <p class="help">{{ sdxl_status.message }}</p>
+  <p class="help">SDXLを使う場合は、まずfrontの候補を生成して採用し、その正式画像を参照しながらsideやdetailの候補を生成してください。</p>
   <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。</p>
   <p class="muted">保存済み画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
@@ -29,14 +33,27 @@
             <span class="badge warn">未保存</span>
           {% endif %}
         </div>
-        <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
-          <button type="submit" class="button secondary">SDXLで生成</button>
-        </form>
+        {% if sdxl_status.available %}
+          <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
+            <button type="submit" class="button secondary">SDXL候補を生成</button>
+          </form>
+        {% endif %}
         <div class="copy-row">
           <textarea class="copybox" readonly id="ref-prompt-{{ prompt.reference_id }}">{{ prompt.prompt }}</textarea>
           <button type="button" class="button ghost copy-btn" data-copy-target="ref-prompt-{{ prompt.reference_id }}">コピー</button>
         </div>
         <div class="preview-grid">
+          {% if prompt.sdxl_candidate.exists %}
+          <div>
+            <label>SDXL候補画像</label>
+            <div class="image-preview">
+              <img src="/files/{{ project }}/{{ prompt.sdxl_candidate.path }}?v={{ prompt.sdxl_candidate.mtime }}" alt="{{ prompt.reference_id }} SDXL候補画像" data-draggable-asset="true" data-drag-name="{{ prompt.reference_id }}_candidate.png">
+            </div>
+            <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/adopt-sdxl">
+              <p style="margin-top:8px"><button type="submit">この候補を参照画像として採用</button></p>
+            </form>
+          </div>
+          {% endif %}
           <div>
             <label>保存済み画像</label>
             <div class="image-preview">

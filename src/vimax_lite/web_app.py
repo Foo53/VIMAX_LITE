@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 import uuid
@@ -17,12 +18,10 @@ from vimax_lite.manual_workflow import (
     image_counts,
     load_design,
     prepare_manual_image_workflow,
-    read_image_manifest,
     register_uploaded_file_bytes,
     register_uploaded_image,
 )
-from vimax_lite.models import GeneratedImage, ProductionDesign, ProjectPaths, SunoMusicParams
-from vimax_lite.renderers import write_image_manifest
+from vimax_lite.models import ProductionDesign, ProjectPaths, SunoMusicParams
 from vimax_lite.pipeline import rebuild_mv_visual_design, run_idea_pipeline
 from vimax_lite.providers import ProviderError, make_provider
 from vimax_lite.timeline import build_timeline_manifest, render_timeline_with_remotion, write_timeline_manifest
@@ -171,6 +170,65 @@ STYLE_OPTIONS = [
 ]
 
 
+def _sdxl_status() -> dict[str, Any]:
+    try:
+        from vimax_lite.sdxl_generator import runtime_status
+
+        return runtime_status()
+    except Exception as exc:
+        return {"available": False, "device": "unavailable", "reference_support": False, "message": str(exc)}
+
+
+def _candidate_path(paths: ProjectPaths, kind: str, image_id: str) -> Path:
+    return paths.root / "images" / "sdxl_candidates" / kind / f"{image_id}.png"
+
+
+def _candidate_relative_path(kind: str, image_id: str) -> str:
+    return f"images/sdxl_candidates/{kind}/{image_id}.png"
+
+
+def _candidate_metadata_path(paths: ProjectPaths, kind: str, image_id: str) -> Path:
+    return _candidate_path(paths, kind, image_id).with_suffix(".json")
+
+
+def _candidate_view(paths: ProjectPaths, kind: str, image_id: str) -> dict[str, Any]:
+    path = _candidate_path(paths, kind, image_id)
+    return {
+        "exists": path.exists(),
+        "path": _candidate_relative_path(kind, image_id) if path.exists() else None,
+        "mtime": str(int(path.stat().st_mtime)) if path.exists() else "",
+    }
+
+
+def _load_candidate_metadata(paths: ProjectPaths, kind: str, image_id: str) -> dict[str, Any]:
+    metadata_path = _candidate_metadata_path(paths, kind, image_id)
+    if not metadata_path.exists():
+        return {}
+    return json.loads(metadata_path.read_text(encoding="utf-8"))
+
+
+def _annotate_candidates(workflow: dict[str, Any], paths: ProjectPaths) -> None:
+    for item in workflow["references"]["characters"]:
+        for prompt in item["prompts"]:
+            prompt["sdxl_candidate"] = _candidate_view(paths, "reference", prompt["reference_id"])
+    for shot in workflow["reference_plan"]["shots"]:
+        shot["sdxl_candidate"] = _candidate_view(paths, "shot", shot["shot_id"])
+
+
+def _dimensions_for_aspect_ratio(aspect_ratio: str) -> tuple[int, int]:
+    sizes = {
+        "16:9": (1344, 768),
+        "9:16": (768, 1344),
+        "4:3": (1152, 864),
+        "3:4": (864, 1152),
+        "1:1": (1024, 1024),
+        "21:9": (1536, 640),
+        "2.35:1": (1536, 640),
+        "2.39:1": (1536, 640),
+    }
+    return sizes.get(aspect_ratio, (1024, 1024))
+
+
 def create_app(output_root: Path = Path("outputs")) -> FastAPI:
     app = FastAPI(title="ViMax Lite Web UI")
     templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -308,12 +366,14 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
     def shots_page(request: Request, project: str) -> HTMLResponse:
         paths = ProjectPaths.for_project(project, output_root)
         design = load_design(paths)
-        reference_plan = build_shot_reference_plan(design, paths)
+        workflow = prepare_manual_image_workflow(project, output_root)
+        _annotate_candidates(workflow, paths)
+        reference_plan = workflow["reference_plan"]
         counts = image_counts(project, output_root)
         return templates.TemplateResponse(
             request,
             "shots.html",
-            {"project": project, "design": design, "reference_plan": reference_plan, "counts": counts},
+            {"project": project, "design": design, "reference_plan": reference_plan, "counts": counts, "sdxl_status": _sdxl_status()},
         )
 
     @app.post("/projects/{project}/shots/{shot_id}/upload")
@@ -334,13 +394,25 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         shot = next((s for s in reference_plan["shots"] if s["shot_id"] == shot_id), None)
         if not shot:
             return RedirectResponse(f"/projects/{project}/shots", status_code=303)
+        image_prompt = next((prompt for prompt in design.image_prompts if prompt.shot_id == shot_id), None)
+        width, height = _dimensions_for_aspect_ratio(image_prompt.aspect_ratio if image_prompt else "16:9")
+        reference_paths = [str(paths.root / asset["path"]) for asset in shot["reference_assets"] if asset["exists"]]
         job = jobs.create(project)
         thread = threading.Thread(
             target=_run_sdxl_job,
             kwargs={
                 "job_id": job.id,
                 "project": project,
-                "items": [{"id": shot_id, "prompt": shot["manual_prompt"], "kind": "shot"}],
+                "items": [
+                    {
+                        "id": shot_id,
+                        "prompt": shot["manual_prompt"],
+                        "kind": "shot",
+                        "reference_paths": reference_paths,
+                        "width": width,
+                        "height": height,
+                    }
+                ],
                 "return_page": f"/projects/{project}/shots#shot-{shot_id}",
                 "output_root": output_root,
             },
@@ -349,37 +421,34 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         thread.start()
         return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
-    @app.post("/projects/{project}/shots/generate-all")
-    def generate_all_shots(project: str) -> RedirectResponse:
+    @app.post("/projects/{project}/shots/{shot_id}/adopt-sdxl")
+    def adopt_shot_candidate(project: str, shot_id: str) -> RedirectResponse:
         paths = ProjectPaths.for_project(project, output_root)
-        design = load_design(paths)
-        reference_plan = build_shot_reference_plan(design, paths)
-        items = [
-            {"id": s["shot_id"], "prompt": s["manual_prompt"], "kind": "shot"}
-            for s in reference_plan["shots"]
-            if s["status"] != "generated"
-        ]
-        if not items:
-            return RedirectResponse(f"/projects/{project}/shots", status_code=303)
-        job = jobs.create(project)
-        thread = threading.Thread(
-            target=_run_sdxl_job,
-            kwargs={
-                "job_id": job.id,
-                "project": project,
-                "items": items,
-                "return_page": f"/projects/{project}/shots",
-                "output_root": output_root,
-            },
-            daemon=True,
-        )
-        thread.start()
-        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+        candidate = _candidate_path(paths, "shot", shot_id)
+        if candidate.exists():
+            metadata = _load_candidate_metadata(paths, "shot", shot_id)
+            register_uploaded_image(
+                project,
+                shot_id,
+                candidate,
+                output_root=output_root,
+                kind="shot",
+                model="sdxl-local-ip-adapter" if metadata.get("reference_paths") else "sdxl-local",
+                prompt=metadata.get("prompt", "SDXLで生成して採用された候補画像"),
+            )
+            prepare_manual_image_workflow(project, output_root)
+        return RedirectResponse(f"/projects/{project}/shots#shot-{shot_id}", status_code=303)
 
     @app.get("/projects/{project}/references", response_class=HTMLResponse)
     def references_page(request: Request, project: str) -> HTMLResponse:
+        paths = ProjectPaths.for_project(project, output_root)
         workflow = prepare_manual_image_workflow(project, output_root)
-        return templates.TemplateResponse(request, "references.html", {"project": project, "workflow": workflow})
+        _annotate_candidates(workflow, paths)
+        return templates.TemplateResponse(
+            request,
+            "references.html",
+            {"project": project, "workflow": workflow, "sdxl_status": _sdxl_status()},
+        )
 
     @app.post("/projects/{project}/references/{reference_id}/upload")
     async def upload_reference_image(project: str, reference_id: str, file: UploadFile = File(...)) -> RedirectResponse:
@@ -393,12 +462,18 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
 
     @app.post("/projects/{project}/references/{reference_id}/generate")
     def generate_reference_image(project: str, reference_id: str) -> RedirectResponse:
+        paths = ProjectPaths.for_project(project, output_root)
         workflow = prepare_manual_image_workflow(project, output_root)
         prompt_text = None
+        reference_paths: list[str] = []
         for item in workflow["references"]["characters"]:
             for p in item["prompts"]:
                 if p["reference_id"] == reference_id:
                     prompt_text = p["prompt"]
+                    if p["pose"] != "front":
+                        front = paths.root / "references" / f"character_{p['character_id']}_front.png"
+                        if front.exists():
+                            reference_paths = [str(front)]
                     break
         if not prompt_text:
             return RedirectResponse(f"/projects/{project}/references", status_code=303)
@@ -408,7 +483,16 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
             kwargs={
                 "job_id": job.id,
                 "project": project,
-                "items": [{"id": reference_id, "prompt": prompt_text, "kind": "reference"}],
+                "items": [
+                    {
+                        "id": reference_id,
+                        "prompt": prompt_text,
+                        "kind": "reference",
+                        "reference_paths": reference_paths,
+                        "width": 1024,
+                        "height": 1024,
+                    }
+                ],
                 "return_page": f"/projects/{project}/references#ref-{reference_id}",
                 "output_root": output_root,
             },
@@ -417,30 +501,23 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         thread.start()
         return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
-    @app.post("/projects/{project}/references/generate-all")
-    def generate_all_references(project: str) -> RedirectResponse:
-        workflow = prepare_manual_image_workflow(project, output_root)
-        items = []
-        for item in workflow["references"]["characters"]:
-            for p in item["prompts"]:
-                if not p["saved"]:
-                    items.append({"id": p["reference_id"], "prompt": p["prompt"], "kind": "reference"})
-        if not items:
-            return RedirectResponse(f"/projects/{project}/references", status_code=303)
-        job = jobs.create(project)
-        thread = threading.Thread(
-            target=_run_sdxl_job,
-            kwargs={
-                "job_id": job.id,
-                "project": project,
-                "items": items,
-                "return_page": f"/projects/{project}/references",
-                "output_root": output_root,
-            },
-            daemon=True,
-        )
-        thread.start()
-        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+    @app.post("/projects/{project}/references/{reference_id}/adopt-sdxl")
+    def adopt_reference_candidate(project: str, reference_id: str) -> RedirectResponse:
+        paths = ProjectPaths.for_project(project, output_root)
+        candidate = _candidate_path(paths, "reference", reference_id)
+        if candidate.exists():
+            metadata = _load_candidate_metadata(paths, "reference", reference_id)
+            register_uploaded_image(
+                project,
+                reference_id,
+                candidate,
+                output_root=output_root,
+                kind="reference",
+                model="sdxl-local-ip-adapter" if metadata.get("reference_paths") else "sdxl-local",
+                prompt=metadata.get("prompt", "SDXLで生成して採用された候補画像"),
+            )
+            prepare_manual_image_workflow(project, output_root)
+        return RedirectResponse(f"/projects/{project}/references#ref-{reference_id}", status_code=303)
 
     @app.post("/projects/{project}/references/upload-batch")
     async def upload_reference_images_batch(request: Request, project: str) -> RedirectResponse:
@@ -546,46 +623,69 @@ def _run_sdxl_job(
     *,
     job_id: str,
     project: str,
-    items: list[dict[str, str]],
+    items: list[dict[str, Any]],
     return_page: str,
     output_root: Path,
 ) -> None:
-    from vimax_lite.sdxl_generator import generate_image
-
     total = len(items)
-    jobs.update(job_id, status="running", stage="generating", message=f"SDXL画像生成を開始します ({total}枚)", current=0, total=total)
+    jobs.update(job_id, status="running", stage="loading", message=f"SDXL生成を準備しています ({total}枚)", current=0, total=total)
+    try:
+        from vimax_lite.sdxl_generator import generate_image, runtime_status
+
+        status = runtime_status()
+        if not status["available"]:
+            raise RuntimeError(status["message"])
+    except Exception as exc:
+        jobs.update(job_id, status="failed", stage="failed", message="SDXLを起動できませんでした", error=str(exc))
+        return
 
     for i, item in enumerate(items):
-        image_id = item["id"]
-        prompt = item["prompt"]
-        kind = item["kind"]
-        jobs.update(job_id, message=f"{image_id} を生成中... ({i + 1}/{total})", current=i, total=total)
+        image_id = str(item["id"])
+        prompt = str(item["prompt"])
+        kind = str(item["kind"])
+        reference_paths = [Path(str(path)) for path in item.get("reference_paths", [])]
+        jobs.update(job_id, stage="generating", message=f"{image_id} の候補画像を生成中... ({i + 1}/{total})", current=i, total=total)
         try:
             paths = ProjectPaths.for_project(project, output_root)
-            if kind == "reference":
-                target_path = paths.root / "references" / f"{image_id}.png"
-            else:
-                target_path = paths.root / "images" / "manual" / f"{image_id}.png"
-
-            generate_image(prompt=prompt, output_path=target_path)
-
-            images = read_image_manifest(paths.image_manifest)
-            images = [img for img in images if img.shot_id != image_id]
-            images.append(
-                GeneratedImage(
-                    shot_id=image_id,
-                    path=str(target_path),
-                    model="sdxl-local",
-                    prompt=prompt[:200],
-                    status="success",
-                )
+            target_path = _candidate_path(paths, kind, image_id)
+            width = int(item.get("width", 1024))
+            height = int(item.get("height", 1024))
+            generate_image(
+                prompt=prompt,
+                output_path=target_path,
+                reference_paths=reference_paths,
+                width=width,
+                height=height,
             )
-            write_image_manifest(images, paths.image_manifest)
+            _candidate_metadata_path(paths, kind, image_id).write_text(
+                json.dumps(
+                    {
+                        "id": image_id,
+                        "kind": kind,
+                        "model": "sdxl-local-ip-adapter" if reference_paths else "sdxl-local",
+                        "prompt": prompt,
+                        "reference_paths": [str(path) for path in reference_paths],
+                        "width": width,
+                        "height": height,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
         except Exception as exc:
-            jobs.update(job_id, status="failed", stage="failed", message=f"{image_id} の生成に失敗しました", error=str(exc))
+            jobs.update(job_id, status="failed", stage="failed", message=f"{image_id} の候補生成に失敗しました", error=str(exc))
             return
 
-    jobs.update(job_id, status="completed", stage="completed", message=f"SDXL画像生成が完了しました ({total}枚)", current=total, total=total, result_url=return_page)
+    jobs.update(
+        job_id,
+        status="completed",
+        stage="completed",
+        message=f"SDXL候補画像を生成しました。確認して採用してください ({total}枚)",
+        current=total,
+        total=total,
+        result_url=return_page,
+    )
 
 
 def _run_generation_job(

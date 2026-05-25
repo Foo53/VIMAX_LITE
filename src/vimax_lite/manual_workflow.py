@@ -295,7 +295,16 @@ def image_counts(project: str, output_root: Path = Path("outputs")) -> dict[str,
     return {"total": total, "generated": generated, "remaining": total - generated}
 
 
-def register_uploaded_image(project: str, image_id: str, source_path: Path, *, output_root: Path = Path("outputs"), kind: str = "shot") -> Path:
+def register_uploaded_image(
+    project: str,
+    image_id: str,
+    source_path: Path,
+    *,
+    output_root: Path = Path("outputs"),
+    kind: str = "shot",
+    model: str = "manual-chatgpt",
+    prompt: str = "Web UIからアップロードされた手作業生成画像",
+) -> Path:
     paths = ProjectPaths.for_project(project, output_root)
     target_dir = paths.root / ("references" if kind == "reference" else "images/manual")
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -308,8 +317,8 @@ def register_uploaded_image(project: str, image_id: str, source_path: Path, *, o
         GeneratedImage(
             shot_id=image_id,
             path=str(target_path),
-            model="manual-chatgpt",
-            prompt="Web UIからアップロードされた手作業生成画像",
+            model=model,
+            prompt=prompt,
             status="success",
         )
     )

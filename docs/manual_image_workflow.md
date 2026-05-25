@@ -12,6 +12,28 @@
 6. 生成画像をWeb UIへアップロードします。
 7. 次ショットでは、キャラクター参照画像に加えて直前ショット画像も参照候補として表示されます。
 
+## ローカルSDXLを使う場合
+
+Web UIでは、手作業でChatGPTへ貼り付ける方法に加えて、ローカルSDXLで候補画像を生成できます。SDXLの候補は即座に正式画像にはならず、画面で確認して「採用」したときだけ参照画像またはショット画像になります。
+
+1. `pip install -e ".[sdxl]"` で追加依存関係を導入します。
+2. キャラクター参照画像では、まず `front` のSDXL候補を生成して採用します。
+3. `side`、`back`、`detail` は、採用済みの `front` をIP-Adapterの参照画像として使って候補を生成します。
+4. ショットでは、表示順に候補を生成して採用します。
+5. 次ショットの候補生成時には、採用済みのキャラクター参照画像と直前ショット画像をIP-Adapterへ渡します。
+
+この設計では、プロンプトにファイル名を書くだけではなく、画像データ自体を生成モデルの条件として渡します。一方で、候補画像を自動採点して最良画像を自動採用する部分は未実装であり、現在は人間が品質確認を担当します。
+
+SDXLの候補画像と生成条件は、次の場所へ保存されます。
+
+```text
+outputs/<project>/images/sdxl_candidates/
+  reference/<reference_id>.png
+  reference/<reference_id>.json
+  shot/<shot_id>.png
+  shot/<shot_id>.json
+```
+
 ## 生成されるファイル
 
 - `references/character_reference_sheet.md`

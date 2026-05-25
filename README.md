@@ -6,7 +6,7 @@ ViMax Lite は、HKUDS/ViMax の「動画生成前の設計工程」を再現す
 
 このツールはAI動画生成APIによる動画そのものは生成しません。代わりに、動画生成ツールへ渡す前段階の成果物として、制作設計書、構造化 JSON、絵コンテ、画像生成プロンプト、動画生成プロンプト、継続性レポート、RAG の参照履歴、学習メモ、任意の参考画像を生成します。
 
-今後の派生として、Remotion を使い、生成済み画像をつなげて字幕と読み上げ音声を付けた「画像ベースの組み立て動画」を作る計画があります。これはAI動画生成ではなく編集・レンダリングレイヤーですが、将来の動画生成APIとも両立できる設計です。詳細は [docs/remotion_video_assembly_plan.md](docs/remotion_video_assembly_plan.md) にまとめています。
+Remotion を使い、生成済み画像をつなげて字幕を付けた「画像ベースの組み立て動画」を生成できます。MVモードではアップロードしたBGMも動画へ組み込めます。SEと読み上げ音声は今後追加する計画で、将来の動画生成APIとも両立できる設計です。詳細は [docs/remotion_video_assembly_plan.md](docs/remotion_video_assembly_plan.md) にまとめています。
 
 ## セットアップ
 
@@ -46,7 +46,7 @@ vimax-lite timeline --project portfolio-demo
 vimax-lite render-video --project portfolio-demo
 ```
 
-`render-video` は `remotion/` のNode.js依存関係を使います。初回は `cd remotion && npm install` を実行してください。現時点のRemotion動画は音なし・字幕付きです。BGM、SE、読み上げ音声は今後追加予定です。
+`render-video` は `remotion/` のNode.js依存関係を使います。初回は `cd remotion && npm install` を実行してください。通常のRemotion動画は字幕付きで、MVモードではアップロードしたBGMを再生できます。SE、読み上げ音声は今後追加予定です。
 
 Web UIでアイデア入力から始める場合:
 
@@ -55,6 +55,20 @@ vimax-lite web --host 127.0.0.1 --port 8000
 ```
 
 ブラウザで `http://127.0.0.1:8000` を開くと、アイデア入力、生成進捗、制作設計確認、参照画像シート、ショット画像生成キュー、画像アップロード、残り生成枚数の確認ができます。
+
+### ローカルSDXLによる候補画像生成
+
+Web UIからローカルSDXLを使う場合は、追加依存関係を導入します。
+
+```bash
+pip install -e ".[sdxl]"
+```
+
+- 初回生成時にはSDXL本体とIP-Adapterのモデル取得が発生します。CUDA対応GPUを推奨します。
+- SDXLの画像はすぐに正式画像へ上書きせず、`images/sdxl_candidates/` に候補として保存します。
+- 内容を確認して「採用」を押した候補だけが、参照画像またはショット画像として次の生成に利用されます。
+- キャラクター参照画像は `front` を先に採用し、その画像を参照して他の向きを生成します。
+- ショット画像は順番に生成・採用します。採用済みの前ショット画像とキャラクター参照画像を、IP-Adapterによる視覚条件付けへ渡します。
 
 Gemini API を使う場合:
 
@@ -125,6 +139,13 @@ outputs/<project>/
     shot_001.png
     manual/
       <shot_id>.png
+    sdxl_candidates/
+      reference/
+        <reference_id>.png
+        <reference_id>.json
+      shot/
+        <shot_id>.png
+        <shot_id>.json
   videos/
     assembled_video.mp4
     render_report.md

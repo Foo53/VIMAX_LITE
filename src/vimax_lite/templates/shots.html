@@ -6,9 +6,11 @@
     <h1>ショット生成キュー</h1>
     <a class="button secondary" href="/projects/{{ project }}">戻る</a>
     <a class="button secondary" href="/projects/{{ project }}/references">参照画像へ</a>
-    <form method="post" action="/projects/{{ project }}/shots/generate-all" style="display:inline">
-      <button type="submit" class="button secondary">SDXLで一括生成</button>
-    </form>
+    {% if sdxl_status.available %}
+      <span class="badge">{{ sdxl_status.device }}</span>
+    {% else %}
+      <span class="badge warn">SDXL未準備</span>
+    {% endif %}
   </div>
   <div class="grid">
     <div class="stat"><strong>総数</strong><br>{{ counts.total }}</div>
@@ -16,6 +18,8 @@
     <div class="stat"><strong>残り生成必要枚数</strong><br>{{ counts.remaining }}</div>
   </div>
   <p class="muted">表示されている参照画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
+  <p class="help">{{ sdxl_status.message }}</p>
+  <p class="help">ショットは順番に候補を生成して確認・採用してください。採用済みの前ショット画像が、次のショットの参照画像として条件付けに使われます。</p>
 </section>
 {% for shot in reference_plan.shots %}
   <section class="panel shot" id="shot-{{ shot.shot_id }}">
@@ -26,9 +30,11 @@
       {% else %}
         <span class="badge warn">未生成</span>
       {% endif %}
-      <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/generate" style="display:inline">
-        <button type="submit" class="button secondary">SDXLで生成</button>
-      </form>
+      {% if sdxl_status.available %}
+        <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/generate" style="display:inline">
+          <button type="submit" class="button secondary">SDXL候補を生成</button>
+        </form>
+      {% endif %}
     </div>
     <p>{{ shot.description }}</p>
     <h3>必ず添付する参照画像</h3>
@@ -54,6 +60,19 @@
       <textarea class="copybox" readonly id="prompt-{{ shot.shot_id }}">{{ shot.manual_prompt }}</textarea>
       <button type="button" class="button ghost copy-btn" data-copy-target="prompt-{{ shot.shot_id }}">コピー</button>
     </div>
+    {% if shot.sdxl_candidate.exists %}
+      <h3>SDXL候補画像</h3>
+      <div class="preview-grid">
+        <div>
+          <div class="image-preview">
+            <img src="/files/{{ project }}/{{ shot.sdxl_candidate.path }}?v={{ shot.sdxl_candidate.mtime }}" alt="{{ shot.shot_id }} SDXL候補画像" data-draggable-asset="true" data-drag-name="{{ shot.shot_id }}_candidate.png">
+          </div>
+          <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/adopt-sdxl">
+            <p><button type="submit">この候補をショット画像として採用</button></p>
+          </form>
+        </div>
+      </div>
+    {% endif %}
     <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/upload" enctype="multipart/form-data">
       <label>生成画像をアップロード</label>
       {% if shot.output_saved_path %}

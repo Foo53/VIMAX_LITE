@@ -6,20 +6,34 @@
     <h1>ショット生成キュー</h1>
     <a class="button secondary" href="/projects/{{ project }}">戻る</a>
     <a class="button secondary" href="/projects/{{ project }}/references">参照画像へ</a>
-    {% if sdxl_status.available %}
-      <span class="badge">{{ sdxl_status.device }}</span>
-    {% else %}
-      <span class="badge warn">SDXL未準備</span>
-    {% endif %}
   </div>
   <div class="grid">
     <div class="stat"><strong>総数</strong><br>{{ counts.total }}</div>
     <div class="stat"><strong>生成済み</strong><br>{{ counts.generated }}</div>
     <div class="stat"><strong>残り生成必要枚数</strong><br>{{ counts.remaining }}</div>
   </div>
-  <p class="muted">表示されている参照画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
-  <p class="help">{{ sdxl_status.message }}</p>
-  <p class="help">ショットは順番に候補を生成して確認・採用してください。採用済みの前ショット画像が、次のショットの参照画像として条件付けに使われます。</p>
+  <div class="inline-fields">
+    <div>
+      <label for="shot-image-backend">画像生成モデル</label>
+      <select id="shot-image-backend" class="image-backend-select">
+        {% for backend in image_backend_options %}
+          <option value="{{ backend.value }}" {% if not backend.available %}disabled{% endif %}>{{ backend.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div data-image-backend-panel="manual_chatgpt">
+    <p class="help">表示された参照画像をChatGPTへ添付し、貼り付け用プロンプトで生成します。</p>
+  </div>
+  <div data-image-backend-panel="sdxl_ip_adapter" hidden>
+    {% if sdxl_status.available %}
+      <span class="badge">{{ sdxl_status.device }}</span>
+    {% else %}
+      <span class="badge warn">SDXL未準備</span>
+    {% endif %}
+    <p class="help">{{ sdxl_status.message }}</p>
+    <p class="help">採用済みの前ショット画像を次ショットのIP-Adapter参照条件として利用します。</p>
+  </div>
 </section>
 {% for shot in reference_plan.shots %}
   <section class="panel shot" id="shot-{{ shot.shot_id }}">
@@ -29,11 +43,6 @@
         <span class="badge">生成済み</span>
       {% else %}
         <span class="badge warn">未生成</span>
-      {% endif %}
-      {% if sdxl_status.available %}
-        <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/generate" style="display:inline">
-          <button type="submit" class="button secondary">SDXL候補を生成</button>
-        </form>
       {% endif %}
     </div>
     <p>{{ shot.description }}</p>
@@ -55,10 +64,30 @@
         <p class="muted">なし</p>
       {% endfor %}
     </div>
-    <h3>ChatGPT貼り付け用プロンプト</h3>
-    <div class="copy-row">
-      <textarea class="copybox" readonly id="prompt-{{ shot.shot_id }}">{{ shot.manual_prompt }}</textarea>
-      <button type="button" class="button ghost copy-btn" data-copy-target="prompt-{{ shot.shot_id }}">コピー</button>
+    <div data-image-backend-panel="manual_chatgpt">
+      <h3>ChatGPT貼り付け用プロンプト</h3>
+      <div class="copy-row">
+        <textarea class="copybox" readonly id="prompt-{{ shot.shot_id }}">{{ shot.manual_prompt }}</textarea>
+        <button type="button" class="button ghost copy-btn" data-copy-target="prompt-{{ shot.shot_id }}">コピー</button>
+      </div>
+    </div>
+    <div data-image-backend-panel="sdxl_ip_adapter" hidden>
+      {% if sdxl_status.available %}
+        <form method="post" action="/projects/{{ project }}/shots/{{ shot.shot_id }}/generate" style="display:inline">
+          <input type="hidden" name="image_backend" value="sdxl_ip_adapter">
+          <button type="submit" class="button secondary">SDXL候補を生成</button>
+        </form>
+      {% endif %}
+      <h3>SDXL Positive Prompt</h3>
+      <div class="copy-row">
+        <textarea class="copybox" readonly id="sdxl-positive-{{ shot.shot_id }}">{{ shot.sdxl_prompt }}</textarea>
+        <button type="button" class="button ghost copy-btn" data-copy-target="sdxl-positive-{{ shot.shot_id }}">コピー</button>
+      </div>
+      <h3>SDXL Negative Prompt</h3>
+      <div class="copy-row">
+        <textarea class="copybox" readonly id="sdxl-negative-{{ shot.shot_id }}">{{ shot.sdxl_negative_prompt }}</textarea>
+        <button type="button" class="button ghost copy-btn" data-copy-target="sdxl-negative-{{ shot.shot_id }}">コピー</button>
+      </div>
     </div>
     {% if shot.sdxl_candidate.exists %}
       <h3>SDXL候補画像</h3>
@@ -103,6 +132,17 @@
 {% endfor %}
 <script>
   document.addEventListener("DOMContentLoaded", () => {
+    const backendSelect = document.querySelector(".image-backend-select");
+    const updateBackendPanels = () => {
+      const selected = backendSelect ? backendSelect.value : "manual_chatgpt";
+      document.querySelectorAll("[data-image-backend-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.imageBackendPanel !== selected;
+      });
+    };
+    if (backendSelect) {
+      backendSelect.addEventListener("change", updateBackendPanels);
+      updateBackendPanels();
+    }
     document.querySelectorAll("input[type='file'][data-preview-target]").forEach((input) => {
       input.addEventListener("change", () => {
         const target = input.dataset.previewTarget;

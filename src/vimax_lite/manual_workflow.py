@@ -10,6 +10,14 @@ from vimax_lite.renderers import write_image_manifest
 
 
 REFERENCE_POSES = ("front", "side", "back", "detail")
+SDXL_REFERENCE_NEGATIVE_PROMPT = (
+    "multiple characters, duplicate subject, multiple views, turnaround sheet, model sheet, "
+    "contact sheet, grid, panels, visible text, caption, logo, watermark, distorted proportions, low quality"
+)
+SDXL_SHOT_NEGATIVE_PROMPT = (
+    "duplicate subject, inconsistent character design, multiple views, split screen, grid, panels, "
+    "visible text, caption, logo, watermark, distorted anatomy, distorted wheels, blurry, low quality"
+)
 
 
 def prepare_manual_image_workflow(project: str, output_root: Path = Path("outputs")) -> dict[str, Any]:
@@ -52,13 +60,24 @@ def build_character_reference_sheet(design: ProductionDesign) -> dict[str, Any]:
         )
         for pose in REFERENCE_POSES:
             pose_instruction = reference_pose_instruction(pose)
+            manual_prompt = f"{base_prompt} {pose_instruction} Generate only this single requested view in this image."
             prompts.append(
                 {
                     "reference_id": f"character_{character.id}_{pose}",
                     "character_id": character.id,
                     "pose": pose,
                     "filename": f"character_{character.id}_{pose}.png",
-                    "prompt": f"{base_prompt} {pose_instruction} Generate only this single requested view in this image.",
+                    "prompt": manual_prompt,
+                    "sdxl_prompt": build_sdxl_reference_prompt(
+                        character.name,
+                        role,
+                        appearance,
+                        wardrobe,
+                        personality,
+                        continuity_notes,
+                        pose,
+                    ),
+                    "sdxl_negative_prompt": SDXL_REFERENCE_NEGATIVE_PROMPT,
                 }
             )
         characters.append({"character": character.model_dump(), "prompts": prompts})
@@ -89,6 +108,29 @@ def reference_pose_instruction(pose: str) -> str:
     if pose == "detail":
         return "View: detail reference. Show exactly one close-up crop focused on the most important design details, materials, colors, and distinctive features."
     return f"View: {pose}. Show exactly one character in one pose."
+
+
+def build_sdxl_reference_prompt(
+    name: str,
+    role: str,
+    appearance: str,
+    wardrobe: str,
+    personality: str,
+    continuity_notes: list[str],
+    pose: str,
+) -> str:
+    """SDXL向けに、参照画像ファイルの操作説明を含まない視覚プロンプトを作る。"""
+    framing = {
+        "front": "front view, full body, facing camera",
+        "side": "clean left-facing side profile, full body",
+        "back": "back view, full body, facing away from camera",
+        "detail": "close-up detail view of distinctive materials and design features",
+    }.get(pose, f"{pose} view, single pose")
+    return (
+        f"single character reference image, {framing}, {name}, {role}, {appearance}, {wardrobe}, "
+        f"{personality}, {'; '.join(continuity_notes)}, clean neutral studio background, centered composition, "
+        "clear silhouette, consistent materials and colors, production concept art, highly detailed"
+    )
 
 
 def english_or_fallback(text: str, fallback: str) -> str:
@@ -127,6 +169,8 @@ def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> 
         image_prompt = prompt_by_shot.get(shot.shot_id)
         visual_prompt = build_shot_visual_prompt(shot, image_prompt.prompt if image_prompt else "")
         manual_prompt = build_manual_prompt(shot.shot_id, visual_prompt, required_refs)
+        sdxl_prompt = build_sdxl_shot_prompt(visual_prompt, image_prompt.style_tags if image_prompt else [])
+        sdxl_negative_prompt = build_sdxl_negative_prompt(image_prompt.negative_prompt if image_prompt else "")
         output_file = f"images/manual/{shot.shot_id}.png"
         output_path = paths.root / output_file
         shots.append(
@@ -141,6 +185,8 @@ def build_shot_reference_plan(design: ProductionDesign, paths: ProjectPaths) -> 
                 "output_saved_path": output_file if output_path.exists() else None,
                 "output_saved_mtime": str(int(output_path.stat().st_mtime)) if output_path.exists() else "",
                 "manual_prompt": manual_prompt,
+                "sdxl_prompt": sdxl_prompt,
+                "sdxl_negative_prompt": sdxl_negative_prompt,
                 "status": image_status(paths, shot.shot_id),
             }
         )
@@ -161,6 +207,24 @@ def build_shot_visual_prompt(shot, image_prompt: str) -> str:
             f"First-frame intent: {shot.first_frame}. Last-frame intent: {shot.last_frame}."
         )
     return prompt
+
+
+def build_sdxl_shot_prompt(visual_prompt: str, style_tags: list[str]) -> str:
+    """SDXL向けに、参照の添付手順ではなく描画内容だけを渡すプロンプトを作る。"""
+    styles = ", ".join(tag for tag in style_tags if tag)
+    style_clause = f", {styles}" if styles else ""
+    return (
+        f"{visual_prompt} Cinematic production still, one coherent frame, consistent subject identity and wardrobe, "
+        f"detailed environment, controlled composition, high quality{style_clause}."
+    )
+
+
+def build_sdxl_negative_prompt(image_negative_prompt: str) -> str:
+    """エージェント設計の禁止条件をSDXLの共通negative promptへ統合する。"""
+    additional = english_or_fallback(image_negative_prompt, "")
+    if additional:
+        return f"{SDXL_SHOT_NEGATIVE_PROMPT}, {additional}"
+    return SDXL_SHOT_NEGATIVE_PROMPT
 
 
 def build_reference_assets(paths: ProjectPaths, required_refs: list[str]) -> list[dict[str, Any]]:
@@ -235,6 +299,7 @@ def write_reference_outputs(paths: ProjectPaths, references: dict[str, Any], ref
     (paths.root / "reference_plan.json").write_text(json.dumps(reference_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     (paths.root / "reference_plan.md").write_text(render_reference_plan(reference_plan), encoding="utf-8")
     (paths.root / "manual_generation_guide.md").write_text(render_manual_generation_guide(references, reference_plan), encoding="utf-8")
+    (paths.root / "sdxl_generation_guide.md").write_text(render_sdxl_generation_guide(references, reference_plan), encoding="utf-8")
 
 
 def render_character_reference_sheet(references: dict[str, Any]) -> str:
@@ -277,6 +342,50 @@ def render_manual_generation_guide(references: dict[str, Any], reference_plan: d
     lines.extend(["## 2. ショット画像を順番に生成", ""])
     for shot in reference_plan["shots"]:
         lines.extend([f"### {shot['shot_id']}", shot["manual_prompt"], f"保存先: `{shot['output_file']}`", ""])
+    return "\n".join(lines)
+
+
+def render_sdxl_generation_guide(references: dict[str, Any], reference_plan: dict[str, Any]) -> str:
+    lines = [
+        "# SDXL + IP-Adapter 候補画像生成ガイド",
+        "",
+        "このプロンプトはローカルSDXL用です。参照画像ファイルは文章ではなく、Web UIからIP-Adapter条件として渡されます。",
+        "",
+        "## 1. キャラクター参照画像",
+        "",
+    ]
+    for item in references["characters"]:
+        for prompt in item["prompts"]:
+            lines.extend(
+                [
+                    f"### {prompt['reference_id']}",
+                    "",
+                    "Positive Prompt:",
+                    "",
+                    prompt["sdxl_prompt"],
+                    "",
+                    "Negative Prompt:",
+                    "",
+                    prompt["sdxl_negative_prompt"],
+                    "",
+                ]
+            )
+    lines.extend(["## 2. ショット画像", ""])
+    for shot in reference_plan["shots"]:
+        lines.extend(
+            [
+                f"### {shot['shot_id']}",
+                "",
+                "Positive Prompt:",
+                "",
+                shot["sdxl_prompt"],
+                "",
+                "Negative Prompt:",
+                "",
+                shot["sdxl_negative_prompt"],
+                "",
+            ]
+        )
     return "\n".join(lines)
 
 

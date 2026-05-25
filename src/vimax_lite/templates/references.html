@@ -6,15 +6,29 @@
     <h1>キャラクター参照シート</h1>
     <a class="button secondary" href="/projects/{{ project }}">戻る</a>
     <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成へ</a>
+  </div>
+  <div class="inline-fields">
+    <div>
+      <label for="reference-image-backend">画像生成モデル</label>
+      <select id="reference-image-backend" class="image-backend-select">
+        {% for backend in image_backend_options %}
+          <option value="{{ backend.value }}" {% if not backend.available %}disabled{% endif %}>{{ backend.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <div data-image-backend-panel="manual_chatgpt">
+    <p class="help">参照画像を添付してChatGPTで生成し、完成画像を保存します。</p>
+  </div>
+  <div data-image-backend-panel="sdxl_ip_adapter" hidden>
     {% if sdxl_status.available %}
       <span class="badge">{{ sdxl_status.device }}</span>
     {% else %}
       <span class="badge warn">SDXL未準備</span>
     {% endif %}
+    <p class="help">{{ sdxl_status.message }}</p>
+    <p class="help">frontを採用後、他の向きの候補を生成すると参照条件として利用します。</p>
   </div>
-  <p class="muted">まずキャラクター参照画像を生成し、採用した画像を以降のショットで添付参照として使います。SDXLは候補画像を作成し、確認後に採用する方式です。</p>
-  <p class="help">{{ sdxl_status.message }}</p>
-  <p class="help">SDXLを使う場合は、まずfrontの候補を生成して採用し、その正式画像を参照しながらsideやdetailの候補を生成してください。</p>
   <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。</p>
   <p class="muted">保存済み画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
@@ -33,14 +47,30 @@
             <span class="badge warn">未保存</span>
           {% endif %}
         </div>
-        {% if sdxl_status.available %}
-          <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
-            <button type="submit" class="button secondary">SDXL候補を生成</button>
-          </form>
-        {% endif %}
-        <div class="copy-row">
-          <textarea class="copybox" readonly id="ref-prompt-{{ prompt.reference_id }}">{{ prompt.prompt }}</textarea>
-          <button type="button" class="button ghost copy-btn" data-copy-target="ref-prompt-{{ prompt.reference_id }}">コピー</button>
+        <div data-image-backend-panel="manual_chatgpt">
+          <label>ChatGPT貼り付け用プロンプト</label>
+          <div class="copy-row">
+            <textarea class="copybox" readonly id="ref-prompt-{{ prompt.reference_id }}">{{ prompt.prompt }}</textarea>
+            <button type="button" class="button ghost copy-btn" data-copy-target="ref-prompt-{{ prompt.reference_id }}">コピー</button>
+          </div>
+        </div>
+        <div data-image-backend-panel="sdxl_ip_adapter" hidden>
+          {% if sdxl_status.available %}
+            <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
+              <input type="hidden" name="image_backend" value="sdxl_ip_adapter">
+              <button type="submit" class="button secondary">SDXL候補を生成</button>
+            </form>
+          {% endif %}
+          <label>SDXL Positive Prompt</label>
+          <div class="copy-row">
+            <textarea class="copybox" readonly id="ref-sdxl-positive-{{ prompt.reference_id }}">{{ prompt.sdxl_prompt }}</textarea>
+            <button type="button" class="button ghost copy-btn" data-copy-target="ref-sdxl-positive-{{ prompt.reference_id }}">コピー</button>
+          </div>
+          <label>SDXL Negative Prompt</label>
+          <div class="copy-row">
+            <textarea class="copybox" readonly id="ref-sdxl-negative-{{ prompt.reference_id }}">{{ prompt.sdxl_negative_prompt }}</textarea>
+            <button type="button" class="button ghost copy-btn" data-copy-target="ref-sdxl-negative-{{ prompt.reference_id }}">コピー</button>
+          </div>
         </div>
         <div class="preview-grid">
           {% if prompt.sdxl_candidate.exists %}
@@ -87,6 +117,17 @@
   </section>
 <script>
   document.addEventListener("DOMContentLoaded", () => {
+    const backendSelect = document.querySelector(".image-backend-select");
+    const updateBackendPanels = () => {
+      const selected = backendSelect ? backendSelect.value : "manual_chatgpt";
+      document.querySelectorAll("[data-image-backend-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.imageBackendPanel !== selected;
+      });
+    };
+    if (backendSelect) {
+      backendSelect.addEventListener("change", updateBackendPanels);
+      updateBackendPanels();
+    }
     document.querySelectorAll("input[type='file'][data-preview-target]").forEach((input) => {
       input.addEventListener("change", () => {
         const target = input.dataset.previewTarget;

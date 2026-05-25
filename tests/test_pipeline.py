@@ -12,7 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vimax_lite.cli import main
-from vimax_lite.manual_workflow import build_character_reference_sheet, build_manual_prompt, image_counts, prepare_manual_image_workflow
+from vimax_lite.manual_workflow import build_character_reference_sheet, build_manual_prompt, build_sdxl_negative_prompt, build_sdxl_shot_prompt, image_counts, prepare_manual_image_workflow
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
 from vimax_lite.timeline import build_timeline_manifest
@@ -114,6 +114,7 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue((root / "references" / "character_reference_sheet.md").exists())
             self.assertTrue((root / "reference_plan.md").exists())
             self.assertTrue((root / "manual_generation_guide.md").exists())
+            self.assertTrue((root / "sdxl_generation_guide.md").exists())
             self.assertEqual(workflow["reference_plan"]["remaining"], 3)
             self.assertEqual(image_counts("demo", Path(temp))["remaining"], 3)
 
@@ -157,6 +158,19 @@ class PipelineTest(unittest.TestCase):
             self.assertIn("Show exactly one full-body character facing the camera", prompt)
             self.assertNotIn("reference sheet style", prompt)
             self.assertNotIn("配達ロボット", prompt)
+            sdxl_prompt = references["characters"][0]["prompts"][0]["sdxl_prompt"]
+            self.assertIn("single character reference image", sdxl_prompt)
+            self.assertIn("front view", sdxl_prompt)
+            self.assertNotIn("Generate only this single requested view", sdxl_prompt)
+
+    def test_sdxl_shot_prompt_excludes_manual_attachment_instructions(self) -> None:
+        sdxl_prompt = build_sdxl_shot_prompt("A robot beneath neon rain.", ["cinematic", "night"])
+        self.assertIn("A robot beneath neon rain.", sdxl_prompt)
+        self.assertIn("cinematic, night", sdxl_prompt)
+        self.assertNotIn("Required reference images to attach", sdxl_prompt)
+        negative_prompt = build_sdxl_negative_prompt("oversaturated colors, sunny sky")
+        self.assertIn("duplicate subject", negative_prompt)
+        self.assertIn("oversaturated colors, sunny sky", negative_prompt)
 
     def test_remotion_output_mode_shapes_design(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -572,6 +586,7 @@ class PipelineTest(unittest.TestCase):
                         {
                             "id": "shot_001",
                             "prompt": "A cinematic still",
+                            "negative_prompt": "duplicate subject, watermark",
                             "kind": "shot",
                             "reference_paths": [str(reference)],
                             "width": 1344,
@@ -590,6 +605,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(metadata["width"], 1344)
             self.assertEqual(metadata["height"], 768)
             self.assertEqual(generate_image.call_args.kwargs["reference_paths"], [reference])
+            self.assertEqual(generate_image.call_args.kwargs["negative_prompt"], "duplicate subject, watermark")
             self.assertEqual(jobs.get(job.id).status, "completed")
 
     def test_adopting_sdxl_candidate_promotes_it_to_shot_image(self) -> None:
@@ -672,6 +688,8 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("SDXL候補画像", response.text)
             self.assertIn("この候補を参照画像として採用", response.text)
+            self.assertIn("画像生成モデル", response.text)
+            self.assertIn("SDXL Positive Prompt", response.text)
 
 
 if __name__ == "__main__":

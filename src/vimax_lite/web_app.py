@@ -169,6 +169,33 @@ STYLE_OPTIONS = [
     {"value": "manga", "label": "漫画風"},
 ]
 
+IMAGE_BACKEND_OPTIONS = [
+    {
+        "value": "manual_chatgpt",
+        "label": "ChatGPT 手動生成",
+        "description": "参照画像を添付し、表示プロンプトをChatGPTへ貼り付けます。",
+        "available": True,
+    },
+    {
+        "value": "sdxl_ip_adapter",
+        "label": "SDXL + IP-Adapter（ローカル）",
+        "description": "専用プロンプトと参照画像条件付けでローカル候補を生成します。",
+        "available": True,
+    },
+    {
+        "value": "flux_ip_adapter",
+        "label": "FLUX + IP-Adapter（後続対応）",
+        "description": "高品質ローカル候補として追加予定です。",
+        "available": False,
+    },
+    {
+        "value": "gemini_image",
+        "label": "Gemini Image（後続対応）",
+        "description": "API利用可能時の画像生成方式として再接続予定です。",
+        "available": False,
+    },
+]
+
 
 def _sdxl_status() -> dict[str, Any]:
     try:
@@ -373,7 +400,14 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "shots.html",
-            {"project": project, "design": design, "reference_plan": reference_plan, "counts": counts, "sdxl_status": _sdxl_status()},
+            {
+                "project": project,
+                "design": design,
+                "reference_plan": reference_plan,
+                "counts": counts,
+                "sdxl_status": _sdxl_status(),
+                "image_backend_options": IMAGE_BACKEND_OPTIONS,
+            },
         )
 
     @app.post("/projects/{project}/shots/{shot_id}/upload")
@@ -387,7 +421,9 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         return RedirectResponse(f"/projects/{project}/shots#shot-{shot_id}", status_code=303)
 
     @app.post("/projects/{project}/shots/{shot_id}/generate")
-    def generate_shot_image(project: str, shot_id: str) -> RedirectResponse:
+    def generate_shot_image(project: str, shot_id: str, image_backend: str = Form("sdxl_ip_adapter")) -> RedirectResponse:
+        if image_backend != "sdxl_ip_adapter":
+            return RedirectResponse(f"/projects/{project}/shots#shot-{shot_id}", status_code=303)
         paths = ProjectPaths.for_project(project, output_root)
         design = load_design(paths)
         reference_plan = build_shot_reference_plan(design, paths)
@@ -406,7 +442,8 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                 "items": [
                     {
                         "id": shot_id,
-                        "prompt": shot["manual_prompt"],
+                        "prompt": shot["sdxl_prompt"],
+                        "negative_prompt": shot["sdxl_negative_prompt"],
                         "kind": "shot",
                         "reference_paths": reference_paths,
                         "width": width,
@@ -447,7 +484,12 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "references.html",
-            {"project": project, "workflow": workflow, "sdxl_status": _sdxl_status()},
+            {
+                "project": project,
+                "workflow": workflow,
+                "sdxl_status": _sdxl_status(),
+                "image_backend_options": IMAGE_BACKEND_OPTIONS,
+            },
         )
 
     @app.post("/projects/{project}/references/{reference_id}/upload")
@@ -461,15 +503,19 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         return RedirectResponse(f"/projects/{project}/references#ref-{reference_id}", status_code=303)
 
     @app.post("/projects/{project}/references/{reference_id}/generate")
-    def generate_reference_image(project: str, reference_id: str) -> RedirectResponse:
+    def generate_reference_image(project: str, reference_id: str, image_backend: str = Form("sdxl_ip_adapter")) -> RedirectResponse:
+        if image_backend != "sdxl_ip_adapter":
+            return RedirectResponse(f"/projects/{project}/references#ref-{reference_id}", status_code=303)
         paths = ProjectPaths.for_project(project, output_root)
         workflow = prepare_manual_image_workflow(project, output_root)
         prompt_text = None
+        negative_prompt = None
         reference_paths: list[str] = []
         for item in workflow["references"]["characters"]:
             for p in item["prompts"]:
                 if p["reference_id"] == reference_id:
-                    prompt_text = p["prompt"]
+                    prompt_text = p["sdxl_prompt"]
+                    negative_prompt = p["sdxl_negative_prompt"]
                     if p["pose"] != "front":
                         front = paths.root / "references" / f"character_{p['character_id']}_front.png"
                         if front.exists():
@@ -487,6 +533,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                     {
                         "id": reference_id,
                         "prompt": prompt_text,
+                        "negative_prompt": negative_prompt,
                         "kind": "reference",
                         "reference_paths": reference_paths,
                         "width": 1024,
@@ -643,6 +690,7 @@ def _run_sdxl_job(
         image_id = str(item["id"])
         prompt = str(item["prompt"])
         kind = str(item["kind"])
+        negative_prompt = str(item.get("negative_prompt", ""))
         reference_paths = [Path(str(path)) for path in item.get("reference_paths", [])]
         jobs.update(job_id, stage="generating", message=f"{image_id} の候補画像を生成中... ({i + 1}/{total})", current=i, total=total)
         try:
@@ -650,12 +698,17 @@ def _run_sdxl_job(
             target_path = _candidate_path(paths, kind, image_id)
             width = int(item.get("width", 1024))
             height = int(item.get("height", 1024))
+            generation_kwargs: dict[str, Any] = {
+                "prompt": prompt,
+                "output_path": target_path,
+                "reference_paths": reference_paths,
+                "width": width,
+                "height": height,
+            }
+            if negative_prompt:
+                generation_kwargs["negative_prompt"] = negative_prompt
             generate_image(
-                prompt=prompt,
-                output_path=target_path,
-                reference_paths=reference_paths,
-                width=width,
-                height=height,
+                **generation_kwargs,
             )
             _candidate_metadata_path(paths, kind, image_id).write_text(
                 json.dumps(
@@ -664,6 +717,7 @@ def _run_sdxl_job(
                         "kind": kind,
                         "model": "sdxl-local-ip-adapter" if reference_paths else "sdxl-local",
                         "prompt": prompt,
+                        "negative_prompt": negative_prompt,
                         "reference_paths": [str(path) for path in reference_paths],
                         "width": width,
                         "height": height,

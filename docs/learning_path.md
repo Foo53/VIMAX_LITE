@@ -38,6 +38,10 @@ Image Generation Agent を読みます。テキストのショット設計から
 
 到達目標は、生成AIの出力を即座にアプリ状態へ書き込むのではなく、「生成 -> 評価 -> 採用」という品質管理ループとして設計できることです。
 
+続いて `src/vimax_lite/manual_workflow.py` の `build_manual_prompt()`、`build_sdxl_reference_prompt()`、`build_sdxl_shot_prompt()` を比較します。前者は人間がChatGPTへ操作を伝えるプロンプト、後二者はSDXLへ視覚内容を渡すプロンプトです。
+
+到達目標は、モデル非依存の制作設計を保ったまま、モデルごとに最適化した入力へ変換する「プロンプトコンパイラ」の考え方を説明できることです。
+
 ## Phase 9: ポートフォリオ化
 
 生成された成果物、README、アーキテクチャ説明、サンプルを使って、採用面談や GitHub 上でプロジェクトを説明できる状態にします。

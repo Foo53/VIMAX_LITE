@@ -56,6 +56,13 @@ vimax-lite web --host 127.0.0.1 --port 8000
 
 ブラウザで `http://127.0.0.1:8000` を開くと、アイデア入力、生成進捗、制作設計確認、参照画像シート、ショット画像生成キュー、画像アップロード、残り生成枚数の確認ができます。
 
+参照画像ページとショット画像ページでは、画像生成モデルを選択できます。現在利用できる方式は次の2つです。
+
+- `ChatGPT 手動生成`: 参照画像の添付方法を含む貼り付け用プロンプトを表示します。
+- `SDXL + IP-Adapter（ローカル）`: SDXL専用のPositive / Negative Promptを表示し、参照画像をIP-Adapter条件として渡して候補を生成します。
+
+`FLUX + IP-Adapter` と `Gemini Image` は、モデル専用プロンプトと生成バックエンドを追加するための後続対応枠として画面に表示します。
+
 ### ローカルSDXLによる候補画像生成
 
 Web UIからローカルSDXLを使う場合は、追加依存関係を導入します。
@@ -66,6 +73,7 @@ pip install -e ".[sdxl]"
 
 - 初回生成時にはSDXL本体とIP-Adapterのモデル取得が発生します。CUDA対応GPUを推奨します。
 - SDXLの画像はすぐに正式画像へ上書きせず、`images/sdxl_candidates/` に候補として保存します。
+- ChatGPT貼り付け用プロンプトをSDXLへ流用せず、SDXL専用のPositive / Negative Promptを使います。
 - 内容を確認して「採用」を押した候補だけが、参照画像またはショット画像として次の生成に利用されます。
 - キャラクター参照画像は `front` を先に採用し、その画像を参照して他の向きを生成します。
 - ショット画像は順番に生成・採用します。採用済みの前ショット画像とキャラクター参照画像を、IP-Adapterによる視覚条件付けへ渡します。
@@ -129,6 +137,7 @@ outputs/<project>/
   reference_plan.md
   reference_plan.json
   manual_generation_guide.md
+  sdxl_generation_guide.md
   timeline_manifest.json
   rag_store.json
   references/

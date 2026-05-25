@@ -272,6 +272,43 @@ def _sequential_reference_items(workflow: dict[str, Any], paths: ProjectPaths) -
     return items
 
 
+def _sequential_shot_items(
+    design: ProductionDesign,
+    reference_plan: dict[str, Any],
+    paths: ProjectPaths,
+) -> list[dict[str, Any]]:
+    """未保存ショットを順に生成し、直前候補を次ショットの参照へ渡す。"""
+    items: list[dict[str, Any]] = []
+    image_prompts = {prompt.shot_id: prompt for prompt in design.image_prompts}
+    previous_anchor: Path | None = None
+    for shot in sorted(reference_plan["shots"], key=lambda item: item["order"]):
+        if shot["output_saved_path"]:
+            previous_anchor = paths.root / shot["output_saved_path"]
+            continue
+        image_prompt = image_prompts.get(shot["shot_id"])
+        width, height = _dimensions_for_aspect_ratio(image_prompt.aspect_ratio if image_prompt else "16:9")
+        reference_paths = [
+            str(paths.root / asset["path"])
+            for asset in shot["reference_assets"]
+            if asset["exists"] and not asset["path"].startswith("images/manual/")
+        ]
+        if previous_anchor:
+            reference_paths.append(str(previous_anchor))
+        items.append(
+            {
+                "id": shot["shot_id"],
+                "prompt": shot["sdxl_prompt"],
+                "negative_prompt": shot["sdxl_negative_prompt"],
+                "kind": "shot",
+                "reference_paths": reference_paths,
+                "width": width,
+                "height": height,
+            }
+        )
+        previous_anchor = _candidate_path(paths, "shot", shot["shot_id"])
+    return items
+
+
 def _dimensions_for_aspect_ratio(aspect_ratio: str) -> tuple[int, int]:
     sizes = {
         "16:9": (1344, 768),
@@ -481,6 +518,31 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                     }
                 ],
                 "return_page": f"/projects/{project}/shots#shot-{shot_id}",
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+    @app.post("/projects/{project}/shots/generate-sequential")
+    def generate_shots_sequential(project: str, image_backend: str = Form("sdxl_ip_adapter")) -> RedirectResponse:
+        if image_backend != "sdxl_ip_adapter":
+            return RedirectResponse(f"/projects/{project}/shots", status_code=303)
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        reference_plan = build_shot_reference_plan(design, paths)
+        items = _sequential_shot_items(design, reference_plan, paths)
+        if not items:
+            return RedirectResponse(f"/projects/{project}/shots", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_sdxl_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "items": items,
+                "return_page": f"/projects/{project}/shots",
                 "output_root": output_root,
             },
             daemon=True,

@@ -16,7 +16,7 @@ from vimax_lite.manual_workflow import build_character_reference_sheet, build_ma
 from vimax_lite.models import ProductionBrief, ProductionDesign
 from vimax_lite.providers import MockProvider
 from vimax_lite.timeline import build_timeline_manifest
-from vimax_lite.web_app import _dimensions_for_aspect_ratio, _run_sdxl_job, _sequential_reference_items, create_app, jobs
+from vimax_lite.web_app import _dimensions_for_aspect_ratio, _run_sdxl_job, _sequential_reference_items, _sequential_shot_items, create_app, jobs
 
 
 class PipelineTest(unittest.TestCase):
@@ -746,6 +746,85 @@ class PipelineTest(unittest.TestCase):
                 )
 
             self.assertEqual(reference_existed_during_generation, [True, True, True])
+            self.assertEqual(jobs.get(job.id).status, "completed")
+
+    def test_shot_page_renders_sequential_candidate_generation_action(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "雨の中でロボットが音楽を聞く", "--provider", "mock",
+                ]
+            )
+            with patch(
+                "vimax_lite.web_app._sdxl_status",
+                return_value={"available": True, "device": "CUDA (test)", "reference_support": True, "message": "準備完了"},
+            ):
+                response = TestClient(create_app(Path(temp))).get("/projects/demo/shots")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("未生成分の候補を順次生成", response.text)
+            self.assertIn("直前に生成した未採用候補", response.text)
+
+    def test_sequential_shot_generation_uses_previous_candidate_as_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "雨の中でロボットが音楽を聞く", "--provider", "mock",
+                ]
+            )
+            from vimax_lite.manual_workflow import load_design
+            from vimax_lite.models import ProjectPaths
+
+            paths = ProjectPaths.for_project("demo", Path(temp))
+            for pose in ("front", "side"):
+                reference = paths.root / "references" / f"character_char_robot_{pose}.png"
+                reference.parent.mkdir(parents=True, exist_ok=True)
+                reference.write_bytes(b"reference-image")
+            design = load_design(paths)
+            reference_plan = prepare_manual_image_workflow("demo", Path(temp))["reference_plan"]
+            items = _sequential_shot_items(design, reference_plan, paths)
+            self.assertEqual([item["id"] for item in items], ["shot_001", "shot_002", "shot_003"])
+            first_candidate = paths.root / "images" / "sdxl_candidates" / "shot" / "shot_001.png"
+            second_candidate = paths.root / "images" / "sdxl_candidates" / "shot" / "shot_002.png"
+            self.assertNotIn(str(first_candidate), items[0]["reference_paths"])
+            self.assertIn(str(first_candidate), items[1]["reference_paths"])
+            self.assertIn(str(second_candidate), items[2]["reference_paths"])
+
+            previous_candidates_existed: list[bool] = []
+
+            def fake_generate_image(**kwargs: object) -> Path:
+                output_path = Path(str(kwargs["output_path"]))
+                refs = [Path(str(path)) for path in kwargs.get("reference_paths", [])]
+                candidate_refs = [path for path in refs if "sdxl_candidates" in str(path)]
+                if candidate_refs:
+                    previous_candidates_existed.append(candidate_refs[-1].exists())
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(b"candidate-image")
+                return output_path
+
+            job = jobs.create("demo")
+            with (
+                patch(
+                    "vimax_lite.sdxl_generator.runtime_status",
+                    return_value={"available": True, "device": "test", "reference_support": True, "message": "ok"},
+                ),
+                patch("vimax_lite.sdxl_generator.generate_image", side_effect=fake_generate_image),
+            ):
+                _run_sdxl_job(
+                    job_id=job.id,
+                    project="demo",
+                    items=items,
+                    return_page="/projects/demo/shots",
+                    output_root=Path(temp),
+                )
+
+            self.assertEqual(previous_candidates_existed, [True, True])
             self.assertEqual(jobs.get(job.id).status, "completed")
 
 

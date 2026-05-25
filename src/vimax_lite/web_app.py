@@ -17,10 +17,12 @@ from vimax_lite.manual_workflow import (
     image_counts,
     load_design,
     prepare_manual_image_workflow,
+    read_image_manifest,
     register_uploaded_file_bytes,
     register_uploaded_image,
 )
-from vimax_lite.models import ProductionDesign, ProjectPaths, SunoMusicParams
+from vimax_lite.models import GeneratedImage, ProductionDesign, ProjectPaths, SunoMusicParams
+from vimax_lite.renderers import write_image_manifest
 from vimax_lite.pipeline import rebuild_mv_visual_design, run_idea_pipeline
 from vimax_lite.providers import ProviderError, make_provider
 from vimax_lite.timeline import build_timeline_manifest, render_timeline_with_remotion, write_timeline_manifest
@@ -324,6 +326,56 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         prepare_manual_image_workflow(project, output_root)
         return RedirectResponse(f"/projects/{project}/shots#shot-{shot_id}", status_code=303)
 
+    @app.post("/projects/{project}/shots/{shot_id}/generate")
+    def generate_shot_image(project: str, shot_id: str) -> RedirectResponse:
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        reference_plan = build_shot_reference_plan(design, paths)
+        shot = next((s for s in reference_plan["shots"] if s["shot_id"] == shot_id), None)
+        if not shot:
+            return RedirectResponse(f"/projects/{project}/shots", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_sdxl_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "items": [{"id": shot_id, "prompt": shot["manual_prompt"], "kind": "shot"}],
+                "return_page": f"/projects/{project}/shots#shot-{shot_id}",
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+    @app.post("/projects/{project}/shots/generate-all")
+    def generate_all_shots(project: str) -> RedirectResponse:
+        paths = ProjectPaths.for_project(project, output_root)
+        design = load_design(paths)
+        reference_plan = build_shot_reference_plan(design, paths)
+        items = [
+            {"id": s["shot_id"], "prompt": s["manual_prompt"], "kind": "shot"}
+            for s in reference_plan["shots"]
+            if s["status"] != "generated"
+        ]
+        if not items:
+            return RedirectResponse(f"/projects/{project}/shots", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_sdxl_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "items": items,
+                "return_page": f"/projects/{project}/shots",
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
     @app.get("/projects/{project}/references", response_class=HTMLResponse)
     def references_page(request: Request, project: str) -> HTMLResponse:
         workflow = prepare_manual_image_workflow(project, output_root)
@@ -338,6 +390,57 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         temp_path.unlink(missing_ok=True)
         prepare_manual_image_workflow(project, output_root)
         return RedirectResponse(f"/projects/{project}/references#ref-{reference_id}", status_code=303)
+
+    @app.post("/projects/{project}/references/{reference_id}/generate")
+    def generate_reference_image(project: str, reference_id: str) -> RedirectResponse:
+        workflow = prepare_manual_image_workflow(project, output_root)
+        prompt_text = None
+        for item in workflow["references"]["characters"]:
+            for p in item["prompts"]:
+                if p["reference_id"] == reference_id:
+                    prompt_text = p["prompt"]
+                    break
+        if not prompt_text:
+            return RedirectResponse(f"/projects/{project}/references", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_sdxl_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "items": [{"id": reference_id, "prompt": prompt_text, "kind": "reference"}],
+                "return_page": f"/projects/{project}/references#ref-{reference_id}",
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+    @app.post("/projects/{project}/references/generate-all")
+    def generate_all_references(project: str) -> RedirectResponse:
+        workflow = prepare_manual_image_workflow(project, output_root)
+        items = []
+        for item in workflow["references"]["characters"]:
+            for p in item["prompts"]:
+                if not p["saved"]:
+                    items.append({"id": p["reference_id"], "prompt": p["prompt"], "kind": "reference"})
+        if not items:
+            return RedirectResponse(f"/projects/{project}/references", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_sdxl_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "items": items,
+                "return_page": f"/projects/{project}/references",
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
     @app.post("/projects/{project}/references/upload-batch")
     async def upload_reference_images_batch(request: Request, project: str) -> RedirectResponse:
@@ -437,6 +540,52 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         return RedirectResponse(f"/projects/{project}/music#audio-section", status_code=303)
 
     return app
+
+
+def _run_sdxl_job(
+    *,
+    job_id: str,
+    project: str,
+    items: list[dict[str, str]],
+    return_page: str,
+    output_root: Path,
+) -> None:
+    from vimax_lite.sdxl_generator import generate_image
+
+    total = len(items)
+    jobs.update(job_id, status="running", stage="generating", message=f"SDXL画像生成を開始します ({total}枚)", current=0, total=total)
+
+    for i, item in enumerate(items):
+        image_id = item["id"]
+        prompt = item["prompt"]
+        kind = item["kind"]
+        jobs.update(job_id, message=f"{image_id} を生成中... ({i + 1}/{total})", current=i, total=total)
+        try:
+            paths = ProjectPaths.for_project(project, output_root)
+            if kind == "reference":
+                target_path = paths.root / "references" / f"{image_id}.png"
+            else:
+                target_path = paths.root / "images" / "manual" / f"{image_id}.png"
+
+            generate_image(prompt=prompt, output_path=target_path)
+
+            images = read_image_manifest(paths.image_manifest)
+            images = [img for img in images if img.shot_id != image_id]
+            images.append(
+                GeneratedImage(
+                    shot_id=image_id,
+                    path=str(target_path),
+                    model="sdxl-local",
+                    prompt=prompt[:200],
+                    status="success",
+                )
+            )
+            write_image_manifest(images, paths.image_manifest)
+        except Exception as exc:
+            jobs.update(job_id, status="failed", stage="failed", message=f"{image_id} の生成に失敗しました", error=str(exc))
+            return
+
+    jobs.update(job_id, status="completed", stage="completed", message=f"SDXL画像生成が完了しました ({total}枚)", current=total, total=total, result_url=return_page)
 
 
 def _run_generation_job(

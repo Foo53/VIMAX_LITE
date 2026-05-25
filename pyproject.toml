@@ -16,6 +16,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+sdxl = [
+    "torch",
+    "diffusers[torch]",
+    "transformers",
+    "accelerate",
+    "safetensors",
+]
 dev = [
     "pytest>=8.0.0",
 ]

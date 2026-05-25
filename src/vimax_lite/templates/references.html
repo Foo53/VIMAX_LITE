@@ -6,8 +6,11 @@
     <h1>キャラクター参照シート</h1>
     <a class="button secondary" href="/projects/{{ project }}">戻る</a>
     <a class="button secondary" href="/projects/{{ project }}/shots">ショット生成へ</a>
+    <form method="post" action="/projects/{{ project }}/references/generate-all" style="display:inline">
+      <button type="submit" class="button secondary">SDXLで一括生成</button>
+    </form>
   </div>
-  <p class="muted">まずキャラクター参照画像をChatGPTで生成し、ここへアップロードします。以降のショットで添付参照として使います。</p>
+  <p class="muted">まずキャラクター参照画像をChatGPTで生成し、ここへアップロードします。以降のショットで添付参照として使います。「SDXLで生成」ボタンでローカルSDXLモデルによる自動生成も可能です。</p>
   <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。</p>
   <p class="muted">保存済み画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
 </section>
@@ -26,6 +29,9 @@
             <span class="badge warn">未保存</span>
           {% endif %}
         </div>
+        <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
+          <button type="submit" class="button secondary">SDXLで生成</button>
+        </form>
         <div class="copy-row">
           <textarea class="copybox" readonly id="ref-prompt-{{ prompt.reference_id }}">{{ prompt.prompt }}</textarea>
           <button type="button" class="button ghost copy-btn" data-copy-target="ref-prompt-{{ prompt.reference_id }}">コピー</button>

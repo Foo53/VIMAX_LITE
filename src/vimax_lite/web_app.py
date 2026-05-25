@@ -242,6 +242,36 @@ def _annotate_candidates(workflow: dict[str, Any], paths: ProjectPaths) -> None:
         shot["sdxl_candidate"] = _candidate_view(paths, "shot", shot["shot_id"])
 
 
+def _sequential_reference_items(workflow: dict[str, Any], paths: ProjectPaths) -> list[dict[str, Any]]:
+    """未保存の参照候補を、各キャラクターのfrontから順に生成できる形へ整える。"""
+    items: list[dict[str, Any]] = []
+    pose_order = {"front": 0, "side": 1, "back": 2, "detail": 3}
+    for character in workflow["references"]["characters"]:
+        prompts = sorted(character["prompts"], key=lambda prompt: pose_order.get(prompt["pose"], 99))
+        front_prompt = next((prompt for prompt in prompts if prompt["pose"] == "front"), None)
+        if front_prompt is None:
+            continue
+        adopted_front = paths.root / "references" / f"{front_prompt['reference_id']}.png"
+        generated_front = _candidate_path(paths, "reference", front_prompt["reference_id"])
+        front_anchor = adopted_front if adopted_front.exists() else generated_front
+        for prompt in prompts:
+            if prompt["saved"]:
+                continue
+            reference_paths = [] if prompt["pose"] == "front" else [str(front_anchor)]
+            items.append(
+                {
+                    "id": prompt["reference_id"],
+                    "prompt": prompt["sdxl_prompt"],
+                    "negative_prompt": prompt["sdxl_negative_prompt"],
+                    "kind": "reference",
+                    "reference_paths": reference_paths,
+                    "width": 1024,
+                    "height": 1024,
+                }
+            )
+    return items
+
+
 def _dimensions_for_aspect_ratio(aspect_ratio: str) -> tuple[int, int]:
     sizes = {
         "16:9": (1344, 768),
@@ -541,6 +571,30 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
                     }
                 ],
                 "return_page": f"/projects/{project}/references#ref-{reference_id}",
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
+
+    @app.post("/projects/{project}/references/generate-sequential")
+    def generate_references_sequential(project: str, image_backend: str = Form("sdxl_ip_adapter")) -> RedirectResponse:
+        if image_backend != "sdxl_ip_adapter":
+            return RedirectResponse(f"/projects/{project}/references", status_code=303)
+        paths = ProjectPaths.for_project(project, output_root)
+        workflow = prepare_manual_image_workflow(project, output_root)
+        items = _sequential_reference_items(workflow, paths)
+        if not items:
+            return RedirectResponse(f"/projects/{project}/references", status_code=303)
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_sdxl_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "items": items,
+                "return_page": f"/projects/{project}/references",
                 "output_root": output_root,
             },
             daemon=True,

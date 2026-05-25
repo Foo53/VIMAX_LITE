@@ -26,8 +26,12 @@
     {% else %}
       <span class="badge warn">SDXL未準備</span>
     {% endif %}
+    <form method="post" action="/projects/{{ project }}/references/generate-sequential" style="display:inline; margin-left:8px">
+      <input type="hidden" name="image_backend" value="sdxl_ip_adapter">
+      <button type="submit" class="button secondary" {% if not sdxl_status.available %}disabled title="SDXL依存関係の導入後に利用できます"{% endif %}>未保存分の候補を順次生成</button>
+    </form>
     <p class="help">{{ sdxl_status.message }}</p>
-    <p class="help">frontを採用後、他の向きの候補を生成すると参照条件として利用します。</p>
+    <p class="help">一括順次生成では、各キャラクターのfront候補を先に生成し、その候補をside / back / detailの参照条件に利用します。生成後の正式採用は個別に確認して行ってください。</p>
   </div>
   <p class="muted">一括保存では、各枠に画像を選択してからページ下部の「選択した参照画像を一括保存」を押してください。</p>
   <p class="muted">保存済み画像は、そのままChatGPTの入力欄へドラッグ&ドロップできます。</p>
@@ -55,12 +59,10 @@
           </div>
         </div>
         <div data-image-backend-panel="sdxl_ip_adapter" hidden>
-          {% if sdxl_status.available %}
-            <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
-              <input type="hidden" name="image_backend" value="sdxl_ip_adapter">
-              <button type="submit" class="button secondary">SDXL候補を生成</button>
-            </form>
-          {% endif %}
+          <form method="post" action="/projects/{{ project }}/references/{{ prompt.reference_id }}/generate" style="display:inline; margin-bottom:8px">
+            <input type="hidden" name="image_backend" value="sdxl_ip_adapter">
+            <button type="submit" class="button secondary" {% if not sdxl_status.available %}disabled title="SDXL依存関係の導入後に利用できます"{% endif %}>SDXL候補を生成</button>
+          </form>
           <label>SDXL Positive Prompt</label>
           <div class="copy-row">
             <textarea class="copybox" readonly id="ref-sdxl-positive-{{ prompt.reference_id }}">{{ prompt.sdxl_prompt }}</textarea>

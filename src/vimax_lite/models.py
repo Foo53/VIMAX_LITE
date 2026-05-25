@@ -115,6 +115,23 @@ class SunoMusicParams(BaseModel):
     audio_path: str | None = Field(default=None, description="保存済み音楽ファイルの相対パス")
 
 
+class SongSection(BaseModel):
+    section_id: str = Field(description="Suno歌詞内のセクションID")
+    label: str = Field(description="Intro、Verse、Chorusなどのセクション名")
+    lyrics: list[str] = Field(default_factory=list, description="このセクションに含まれる歌詞行")
+    mood: str = Field(default="", description="このセクションの感情・雰囲気")
+    visual_intent: str = Field(default="", description="このセクションで映像が担う役割")
+    estimated_duration_seconds: int = Field(default=0, description="想定尺")
+
+
+class MVVisualPlan(BaseModel):
+    concept: str = Field(description="曲から導いたMV全体の映像コンセプト")
+    visual_motifs: list[str] = Field(default_factory=list, description="繰り返し使う象徴・モチーフ")
+    color_script: list[str] = Field(default_factory=list, description="曲構成に沿った色味の推移")
+    pacing_notes: list[str] = Field(default_factory=list, description="曲のテンポ・展開に合わせた編集方針")
+    section_to_visuals: dict[str, str] = Field(default_factory=dict, description="歌詞セクションごとの映像方針")
+
+
 class RAGTraceItem(BaseModel):
     query: str
     results: list[str] = Field(default_factory=list)
@@ -134,6 +151,8 @@ class ProductionDesign(BaseModel):
     rag_trace: list[RAGTraceItem] = Field(default_factory=list)
     learning_notes: list[str] = Field(default_factory=list)
     suno_params: SunoMusicParams | None = Field(default=None, description="MVモード時のSuno音楽生成パラメータ")
+    song_sections: list[SongSection] = Field(default_factory=list, description="MVモードで歌詞を曲構成に分解した結果")
+    mv_visual_plan: MVVisualPlan | None = Field(default=None, description="MVモードで曲から導いた映像設計方針")
     created_at: str = Field(default_factory=now_iso)
 
 

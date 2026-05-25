@@ -9,12 +9,15 @@ from vimax_lite.agents import (
     ContinuityCriticAgent,
     IdeationAgent,
     ImageGenerationAgent,
+    MVVisualPlannerAgent,
     MusicAgent,
     PromptEngineerAgent,
     RevisionAgent,
     ScenePlannerAgent,
     ScreenwriterAgent,
     ShotDirectorAgent,
+    SongAnalysisAgent,
+    build_mv_context,
 )
 from vimax_lite.models import ProductionDesign, ProjectPaths
 from vimax_lite.providers import LLMProvider
@@ -133,6 +136,61 @@ def revise_existing_design(*, project: str, provider: LLMProvider, output_root: 
     return design
 
 
+def rebuild_mv_visual_design(
+    *,
+    project: str,
+    provider: LLMProvider,
+    output_root: Path,
+    progress: ProgressCallback | None = None,
+) -> ProductionDesign:
+    paths = ProjectPaths.for_project(project, output_root)
+    design = ProductionDesign.model_validate_json(paths.design_json.read_text(encoding="utf-8"))
+    if design.brief.output_mode != "mv":
+        raise ValueError("MVモードのプロジェクトだけ映像設計を再生成できます。")
+    if design.suno_params is None:
+        design.suno_params = MusicAgent(provider).run(design.brief)
+
+    rag = RAGStore(paths.rag_store)
+    _notify(progress, "song-analysis", "編集済みの歌詞とstyleを曲構成へ分解しています", 1, 7)
+    song_sections = SongAnalysisAgent(provider).run(design.brief, design.suno_params)
+    _notify(progress, "mv-visual-plan", "曲に準拠するMV映像方針を再生成しています", 2, 7)
+    mv_visual_plan = MVVisualPlannerAgent(provider).run(design.brief, design.suno_params, song_sections)
+    mv_context = build_mv_context(
+        suno_params=design.suno_params,
+        song_sections=song_sections,
+        mv_visual_plan=mv_visual_plan,
+    )
+
+    _notify(progress, "script", "MV方針に沿って脚本ビートを再生成しています", 3, 7)
+    script = ScreenwriterAgent(provider).run(design.brief, mv_context=mv_context)
+    _notify(progress, "characters", "MV方針に沿ってキャラクター設定を再生成しています", 4, 7)
+    characters = CharacterAgent(provider).run(design.brief, script, rag, mv_context=mv_context)
+    _notify(progress, "scenes", "歌詞セクションに沿ってシーン構成を再生成しています", 5, 7)
+    scenes = ScenePlannerAgent(provider).run(design.brief, script, characters, rag, mv_context=mv_context)
+    _notify(progress, "shots", "曲展開に沿ってショット設計を再生成しています", 6, 7)
+    shots = ShotDirectorAgent(provider).run(design.brief, scenes, characters, rag, mv_context=mv_context)
+    prompts = PromptEngineerAgent(provider).run(design.brief, shots, rag, mv_context=mv_context)
+
+    design.script = script.items
+    design.characters = characters.items
+    design.scenes = scenes.items
+    design.shots = shots.items
+    design.image_prompts = prompts.image_prompts
+    design.video_prompts = prompts.video_prompts
+    design.song_sections = song_sections
+    design.mv_visual_plan = mv_visual_plan
+    design.rag_trace = rag.trace
+    design.learning_notes.append("MV再設計: 編集済みのSuno歌詞・style・曲構成を上流コンテキストとして、脚本から画像プロンプトまで再生成しました。")
+
+    _notify(progress, "critic", "再生成したMV映像設計の一貫性を確認しています", 7, 7)
+    report = ContinuityCriticAgent(provider).run(design, rag)
+    design.continuity_issues = report.issues
+    rag.save()
+    write_all_outputs(design, paths.root)
+    write_image_manifest(design.generated_images, paths.image_manifest)
+    return design
+
+
 def _run_common(
     brief,
     source_script: str | None,
@@ -145,16 +203,32 @@ def _run_common(
     image_delay_seconds: float,
     progress: ProgressCallback | None,
 ) -> ProductionDesign:
+    suno_params = None
+    song_sections = []
+    mv_visual_plan = None
+    mv_context = ""
+    if brief.output_mode == "mv":
+        _notify(progress, "music", "MVモードのため、先にSuno歌詞とstyleを生成しています", 2, 11)
+        suno_params = MusicAgent(provider).run(brief)
+        _notify(progress, "song-analysis", "歌詞をIntro/Verse/Chorusなどの曲構成へ分解しています", 3, 11)
+        song_sections = SongAnalysisAgent(provider).run(brief, suno_params)
+        _notify(progress, "mv-visual-plan", "歌詞とstyleに準拠するMV映像方針を生成しています", 4, 11)
+        mv_visual_plan = MVVisualPlannerAgent(provider).run(brief, suno_params, song_sections)
+        mv_context = build_mv_context(
+            suno_params=suno_params,
+            song_sections=song_sections,
+            mv_visual_plan=mv_visual_plan,
+        )
     _notify(progress, "script", "脚本エージェントでビートを生成しています", 2, 9)
-    script = ScreenwriterAgent(provider).run(brief, source_script)
+    script = ScreenwriterAgent(provider).run(brief, source_script, mv_context=mv_context)
     _notify(progress, "characters", "キャラクター設計エージェントで参照情報を整理しています", 3, 9)
-    characters = CharacterAgent(provider).run(brief, script, rag)
+    characters = CharacterAgent(provider).run(brief, script, rag, mv_context=mv_context)
     _notify(progress, "scenes", "シーン設計エージェントで場面構成を作っています", 4, 9)
-    scenes = ScenePlannerAgent(provider).run(brief, script, characters, rag)
+    scenes = ScenePlannerAgent(provider).run(brief, script, characters, rag, mv_context=mv_context)
     _notify(progress, "shots", "ショット設計エージェントでカメラと構図を作っています", 5, 9)
-    shots = ShotDirectorAgent(provider).run(brief, scenes, characters, rag)
+    shots = ShotDirectorAgent(provider).run(brief, scenes, characters, rag, mv_context=mv_context)
     _notify(progress, "prompts", "プロンプト設計エージェントで画像・動画プロンプトを作っています", 6, 9)
-    prompts = PromptEngineerAgent(provider).run(brief, shots, rag)
+    prompts = PromptEngineerAgent(provider).run(brief, shots, rag, mv_context=mv_context)
 
     _notify(progress, "design", "制作設計データを統合しています", 7, 9)
     design = ProductionDesign(
@@ -167,6 +241,9 @@ def _run_common(
         video_prompts=prompts.video_prompts,
         rag_trace=rag.trace,
         learning_notes=_learning_notes(generate_images=generate_images, output_mode=brief.output_mode),
+        suno_params=suno_params,
+        song_sections=song_sections,
+        mv_visual_plan=mv_visual_plan,
     )
     _notify(progress, "critic", "継続性評価エージェントで矛盾を確認しています", 8, 9)
     report = ContinuityCriticAgent(provider).run(design, rag)
@@ -174,11 +251,6 @@ def _run_common(
     if report.issues:
         revision = RevisionAgent(provider).run(design, rag)
         design.learning_notes.extend(f"修正ループ: {note}" for note in revision.notes)
-
-    if brief.output_mode == "mv":
-        _notify(progress, "music", "音楽設計エージェントでSuno向けパラメータを生成しています", 8, 10)
-        suno_params = MusicAgent(provider).run(brief)
-        design.suno_params = suno_params
 
     if generate_images:
         _notify(progress, "images", "画像生成Providerで参考画像を生成しています", 9, 9)

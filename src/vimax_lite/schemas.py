@@ -6,9 +6,11 @@ from vimax_lite.models import (
     CharacterProfile,
     ContinuityIssue,
     ImagePrompt,
+    MVVisualPlan,
     ScenePlan,
     ScriptBeat,
     ShotPlan,
+    SongSection,
     SunoMusicParams,
     VideoPrompt,
 )
@@ -49,3 +51,11 @@ class SunoMusicParamsSchema(BaseModel):
     weirdness: int = Field(default=50, ge=0, le=100, description="Weirdness (0-100)")
     style_influence: int = Field(default=80, ge=0, le=100, description="Style Influence (0-100)")
     audio_influence: int = Field(default=50, ge=0, le=100, description="Audio Influence (0-100)")
+
+
+class SongSectionList(BaseModel):
+    items: list[SongSection] = Field(default_factory=list)
+
+
+class MVVisualPlanSchema(MVVisualPlan):
+    pass

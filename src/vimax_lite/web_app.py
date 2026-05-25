@@ -21,7 +21,7 @@ from vimax_lite.manual_workflow import (
     register_uploaded_image,
 )
 from vimax_lite.models import ProductionDesign, ProjectPaths, SunoMusicParams
-from vimax_lite.pipeline import run_idea_pipeline
+from vimax_lite.pipeline import rebuild_mv_visual_design, run_idea_pipeline
 from vimax_lite.providers import ProviderError, make_provider
 from vimax_lite.timeline import build_timeline_manifest, render_timeline_with_remotion, write_timeline_manifest
 
@@ -361,7 +361,7 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         design = load_design(paths)
         suno_params = design.suno_params
         if not suno_params:
-            suno_params = SunoMusicParams()
+            suno_params = SunoMusicParams(lyrics="")
         audio_url = f"/files/{project}/{suno_params.audio_path}" if suno_params.audio_path else None
         return templates.TemplateResponse(request, "music.html", {"project": project, "design": design, "suno": suno_params, "audio_url": audio_url, "model_options": MODEL_OPTIONS})
 
@@ -370,12 +370,14 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         paths = ProjectPaths.for_project(project, output_root)
         design = load_design(paths)
         form = await request.form()
+        existing_audio_path = design.suno_params.audio_path if design.suno_params else None
         design.suno_params = SunoMusicParams(
             lyrics=str(form.get("lyrics", "")),
             style=str(form.get("style", "")),
             weirdness=int(str(form.get("weirdness", "50"))),
             style_influence=int(str(form.get("style_influence", "80"))),
             audio_influence=int(str(form.get("audio_influence", "50"))),
+            audio_path=existing_audio_path,
         )
         paths.design_json.write_text(design.model_dump_json(indent=2), encoding="utf-8")
         return RedirectResponse(f"/projects/{project}/music", status_code=303)
@@ -390,10 +392,32 @@ def create_app(output_root: Path = Path("outputs")) -> FastAPI:
         provider_name = str(form.get("provider", "mock"))
         model = str(form.get("model", "gemini-2.5-flash"))
         provider = make_provider(provider_name, model, "gemini-2.5-flash-image")
+        existing_audio_path = design.suno_params.audio_path if design.suno_params else None
         suno_params = MusicAgent(provider).run(design.brief, message=message)
+        suno_params.audio_path = existing_audio_path
         design.suno_params = suno_params
         paths.design_json.write_text(design.model_dump_json(indent=2), encoding="utf-8")
         return RedirectResponse(f"/projects/{project}/music", status_code=303)
+
+    @app.post("/projects/{project}/music/rebuild-visuals")
+    async def rebuild_music_visuals(request: Request, project: str) -> RedirectResponse:
+        form = await request.form()
+        provider_name = str(form.get("provider", "mock"))
+        model = str(form.get("model", "gemini-2.5-flash"))
+        job = jobs.create(project)
+        thread = threading.Thread(
+            target=_run_mv_rebuild_job,
+            kwargs={
+                "job_id": job.id,
+                "project": project,
+                "provider_name": provider_name,
+                "model": model,
+                "output_root": output_root,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
     @app.post("/projects/{project}/music/upload-audio")
     async def upload_music_audio(project: str, file: UploadFile = File(...)) -> RedirectResponse:
@@ -472,6 +496,45 @@ def _run_generation_job(
         jobs.update(job_id, status="failed", stage="failed", message="Providerエラーで停止しました", error=str(exc))
     except Exception as exc:
         jobs.update(job_id, status="failed", stage="failed", message="予期しないエラーで停止しました", error=str(exc))
+
+
+def _run_mv_rebuild_job(
+    *,
+    job_id: str,
+    project: str,
+    provider_name: str,
+    model: str,
+    output_root: Path,
+) -> None:
+    jobs.update(job_id, status="running", stage="mv-rebuild", message="MV映像設計の再生成を開始しました", current=0, total=7)
+
+    def progress(stage: str, message: str, current: int, total: int) -> None:
+        jobs.update(job_id, stage=stage, message=message, current=current, total=total)
+
+    try:
+        provider = make_provider(provider_name, model, "gemini-2.5-flash-image")
+        rebuild_mv_visual_design(
+            project=project,
+            provider=provider,
+            output_root=output_root,
+            progress=progress,
+        )
+        prepare_manual_image_workflow(project, output_root)
+        timeline = build_timeline_manifest(project=project, output_root=output_root)
+        write_timeline_manifest(timeline, project, output_root)
+        jobs.update(
+            job_id,
+            status="completed",
+            stage="completed",
+            message="Suno歌詞・styleに準拠したMV映像設計を再生成しました",
+            current=7,
+            total=7,
+            result_url=f"/projects/{project}",
+        )
+    except ProviderError as exc:
+        jobs.update(job_id, status="failed", stage="failed", message="Providerエラーで停止しました", error=str(exc))
+    except Exception as exc:
+        jobs.update(job_id, status="failed", stage="failed", message="MV映像設計の再生成に失敗しました", error=str(exc))
 
 
 def _run_render_job(

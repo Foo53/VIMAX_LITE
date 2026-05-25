@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Series} from 'remotion';
+import {AbsoluteFill, Audio, Series} from 'remotion';
 import {ShotScene} from './ShotScene';
 
 export type TimelineShot = {
@@ -34,7 +34,7 @@ export type TimelineManifest = {
   todos: string[];
 };
 
-export const VimaxTimelineVideo: React.FC<TimelineManifest> = ({title, shots, fps, output_mode, lyrics_timeline}) => {
+export const VimaxTimelineVideo: React.FC<TimelineManifest> = ({title, shots, fps, output_mode, lyrics_timeline, audio}) => {
   if (!shots || shots.length === 0) {
     return (
       <AbsoluteFill style={{backgroundColor: '#111827', color: 'white', alignItems: 'center', justifyContent: 'center'}}>
@@ -46,6 +46,7 @@ export const VimaxTimelineVideo: React.FC<TimelineManifest> = ({title, shots, fp
 
   return (
     <AbsoluteFill style={{backgroundColor: '#05070a'}}>
+      {audio?.bgm ? <Audio src={audio.bgm} /> : null}
       <Series>
         {shots.map((shot) => (
           <Series.Sequence key={shot.shot_id} durationInFrames={Math.max(1, Math.ceil(shot.duration_seconds * fps))}>

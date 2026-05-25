@@ -363,6 +363,8 @@ class PipelineTest(unittest.TestCase):
             self.assertIn("[Chorus", design.suno_params.lyrics)
             self.assertIn("[End]", design.suno_params.lyrics)
             self.assertTrue(any(":" in line for line in design.suno_params.lyrics.split("\n") if line.startswith("[")))
+            self.assertTrue(design.song_sections)
+            self.assertIsNotNone(design.mv_visual_plan)
 
     def test_mv_mode_lyrics_in_captions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -462,6 +464,73 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(audio_path.read_bytes(), b"fake-mp3-data")
             design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
             self.assertEqual(design.suno_params.audio_path, "music/bgm.mp3")
+
+    def test_music_save_preserves_uploaded_audio_path(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "テストMV", "--provider", "mock",
+                    "--output-mode", "mv",
+                ]
+            )
+            client = TestClient(create_app(Path(temp)))
+            client.post(
+                "/projects/demo/music/upload-audio",
+                files={"file": ("bgm.mp3", b"fake-mp3-data", "audio/mpeg")},
+            )
+            response = client.post(
+                "/projects/demo/music/save",
+                data={
+                    "lyrics": "[Verse]\n新しい歌詞\n[End]",
+                    "style": "J-Pop, bright synth, female vocals",
+                    "weirdness": "35",
+                    "style_influence": "85",
+                    "audio_influence": "60",
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            self.assertEqual(design.suno_params.audio_path, "music/bgm.mp3")
+
+    def test_timeline_manifest_includes_uploaded_bgm_data_uri(self) -> None:
+        from fastapi.testclient import TestClient
+
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "テストMV", "--provider", "mock",
+                    "--output-mode", "mv",
+                ]
+            )
+            client = TestClient(create_app(Path(temp)))
+            client.post(
+                "/projects/demo/music/upload-audio",
+                files={"file": ("bgm.mp3", b"fake-mp3-data", "audio/mpeg")},
+            )
+            manifest = build_timeline_manifest(project="demo", output_root=Path(temp))
+            self.assertTrue(manifest.audio["bgm"].startswith("data:audio/mpeg;base64,"))
+
+    def test_rebuild_mv_visuals_uses_existing_suno_params(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            main(
+                [
+                    "--output-root", temp,
+                    "idea2design", "--project", "demo",
+                    "--idea", "テストMV", "--provider", "mock",
+                    "--output-mode", "mv",
+                ]
+            )
+            main(["--output-root", temp, "rebuild-mv-visuals", "--project", "demo", "--provider", "mock"])
+            design = ProductionDesign.model_validate_json((Path(temp) / "demo" / "design.json").read_text(encoding="utf-8"))
+            self.assertTrue(design.song_sections)
+            self.assertIsNotNone(design.mv_visual_plan)
+            self.assertIn("MV再設計", "\n".join(design.learning_notes))
 
 
 if __name__ == "__main__":

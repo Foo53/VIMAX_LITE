@@ -9,6 +9,7 @@ from vimax_lite.models import ProjectPaths
 from vimax_lite.pipeline import (
     generate_images_for_existing_design,
     init_project,
+    rebuild_mv_visual_design,
     revise_existing_design,
     run_idea_pipeline,
     run_script_pipeline,
@@ -46,6 +47,10 @@ def main(argv: list[str] | None = None) -> None:
     revise_cmd = sub.add_parser("revise")
     _add_provider_args(revise_cmd)
     revise_cmd.add_argument("--project", required=True)
+
+    rebuild_mv_cmd = sub.add_parser("rebuild-mv-visuals")
+    _add_provider_args(rebuild_mv_cmd)
+    rebuild_mv_cmd.add_argument("--project", required=True)
 
     inspect_cmd = sub.add_parser("inspect-rag")
     inspect_cmd.add_argument("--project", required=True)
@@ -155,6 +160,16 @@ def main(argv: list[str] | None = None) -> None:
             _print_provider_error(exc)
             return
         print(f"修正が完了しました。継続性指摘数: {len(design.continuity_issues)}")
+        return
+
+    if args.command == "rebuild-mv-visuals":
+        provider = make_provider(args.provider, args.model, args.image_model)
+        try:
+            design = rebuild_mv_visual_design(project=args.project, provider=provider, output_root=output_root)
+        except ProviderError as exc:
+            _print_provider_error(exc)
+            return
+        print(f"MV映像設計を再生成しました: {len(design.shots)} shots")
         return
 
     if args.command == "inspect-rag":

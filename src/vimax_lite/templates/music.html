@@ -63,6 +63,32 @@
 </section>
 
 <section class="panel">
+  <h2>MV映像設計の再生成</h2>
+  <p class="muted">保存済みの歌詞・style・曲構成を上流コンテキストにして、脚本、シーン、ショット、画像プロンプトを作り直します。</p>
+  <form method="post" action="/projects/{{ project }}/music/rebuild-visuals">
+    <div class="inline-fields">
+      <div>
+        <label>Provider</label>
+        <select name="provider">
+          <option value="mock">mock</option>
+          <option value="gemini">gemini</option>
+          <option value="claude">claude</option>
+        </select>
+      </div>
+      <div>
+        <label>Model</label>
+        <select name="model">
+          {% for option in model_options %}
+            <option value="{{ option.value }}" data-provider="{{ option.provider }}">{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <p style="margin-top:8px"><button type="submit">歌詞・styleに合わせて映像設計を再生成</button></p>
+  </form>
+</section>
+
+<section class="panel">
   <h2>再生成</h2>
   <p class="muted">メッセージを入力して音楽設計エージェントにパラメータを再生成させます。現在の内容は上書きされます。</p>
   <form method="post" action="/projects/{{ project }}/music/regenerate">

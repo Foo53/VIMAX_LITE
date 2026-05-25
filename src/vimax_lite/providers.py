@@ -366,6 +366,56 @@ def _mock_payload(name: str, prompt: str) -> dict:
                 for shot in shots
             ],
         }
+    if name == "SongSectionList":
+        return {
+            "items": [
+                {
+                    "section_id": "section_intro",
+                    "label": "Intro",
+                    "lyrics": [],
+                    "mood": "rainy, quiet, expectant",
+                    "visual_intent": "establish the neon rain world and the lonely main motif",
+                    "estimated_duration_seconds": 8,
+                },
+                {
+                    "section_id": "section_verse_1",
+                    "label": "Verse 1",
+                    "lyrics": ["雨の路地に光る水たまり", "小さなロボットが立ち止まる"],
+                    "mood": "intimate and lonely",
+                    "visual_intent": "show Milo discovering the first musical clue",
+                    "estimated_duration_seconds": 18,
+                },
+                {
+                    "section_id": "section_chorus",
+                    "label": "Chorus",
+                    "lyrics": ["壊れたオルゴールが歌い始める", "雨の粒が音符に変わる夜"],
+                    "mood": "emotional and uplifting",
+                    "visual_intent": "open the visual scale and make the street respond to the music",
+                    "estimated_duration_seconds": 24,
+                },
+                {
+                    "section_id": "section_outro",
+                    "label": "Outro",
+                    "lyrics": ["音はまだ路地に残る"],
+                    "mood": "soft afterglow",
+                    "visual_intent": "resolve on a gentle glowing final image",
+                    "estimated_duration_seconds": 10,
+                },
+            ]
+        }
+    if name == "MVVisualPlanSchema":
+        return {
+            "concept": "A lyrics-driven miniature music video where rain, neon, and a music box turn Milo's lonely route into a glowing performance.",
+            "visual_motifs": ["rain ripples", "blue status light", "music-box glow", "neon reflections"],
+            "color_script": ["Intro: cool blue rain", "Verse: muted alley amber", "Chorus: blue and gold bloom", "Outro: soft cyan afterglow"],
+            "pacing_notes": ["hold longer in intro", "gentle close-ups in verse", "wider glowing imagery in chorus", "slow final fade in outro"],
+            "section_to_visuals": {
+                "Intro": "wide lonely establishment of the rainy alley",
+                "Verse 1": "intimate discovery of the music box",
+                "Chorus": "street lights react like musical notes",
+                "Outro": "Milo remains in the softened glow",
+            },
+        }
     if name == "ContinuityReport":
         return {"issues": [{"severity": "low", "location": "shot_003", "issue": "オルゴールの琥珀色の光を明示すると連続性が強くなる。", "recommendation": "shot_003とプロンプトに琥珀色の光を追記する。"}]}
     if name == "RevisionResult":

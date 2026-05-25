@@ -90,6 +90,10 @@ def build_timeline_manifest(
         )
     platform_w, platform_h = _platform_resolution(design.brief.target_platform)
     lyrics_timeline = _build_lyrics_timeline(design) if design.brief.output_mode == "mv" else {}
+    audio = {"bgm": None, "se": None, "narration": None}
+    if design.suno_params and design.suno_params.audio_path:
+        audio_path = paths.root / design.suno_params.audio_path
+        audio["bgm"] = _file_uri_or_none(audio_path)
     return TimelineManifest(
         project=project,
         title=design.brief.title,
@@ -99,6 +103,7 @@ def build_timeline_manifest(
         height=height if height != 1080 or not platform_h else platform_h,
         shots=shots,
         lyrics_timeline=lyrics_timeline,
+        audio=audio,
         todos=[
             "BGMトラックをtimeline_manifest.jsonへ追加し、Remotionで重ねる。",
             "SEトラックをショット単位で指定し、雨音やUI音などを追加する。",
@@ -217,6 +222,15 @@ def _platform_resolution(target_platform: str) -> tuple[int, int]:
 def _build_lyrics_timeline(design: ProductionDesign) -> dict[str, list[str]]:
     if not design.suno_params or not design.suno_params.lyrics:
         return {}
+    if design.song_sections:
+        shot_ids = [shot.shot_id for shot in sorted(design.shots, key=lambda s: s.order)]
+        if not shot_ids:
+            return {}
+        timeline: dict[str, list[str]] = {}
+        for index, shot_id in enumerate(shot_ids):
+            section = design.song_sections[min(index, len(design.song_sections) - 1)]
+            timeline[shot_id] = [f"[{section.label}]", *section.lyrics]
+        return timeline
     all_lines = [line for line in design.suno_params.lyrics.split("\n") if line.strip()]
     shot_ids = [shot.shot_id for shot in sorted(design.shots, key=lambda s: s.order)]
     if not shot_ids or not all_lines:
@@ -268,8 +282,19 @@ def _file_uri_or_none(path: Path | None) -> str | None:
     if path is None or not path.exists():
         return None
     suffix = path.suffix.lower()
-    mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
-    mime = mime_map.get(suffix, "image/png")
+    mime_map = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+        ".ogg": "audio/ogg",
+    }
+    mime = mime_map.get(suffix, "application/octet-stream")
     data = path.read_bytes()
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 

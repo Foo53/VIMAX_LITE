@@ -67,6 +67,32 @@ def render_design(design: ProductionDesign) -> str:
     lines.extend([
         "## キャラクター",
     ])
+    if design.song_sections:
+        lines.extend(["## MV曲構成分析", ""])
+        for section in design.song_sections:
+            lines.extend(
+                [
+                    f"### {section.label}",
+                    f"- Mood: {section.mood}",
+                    f"- Visual intent: {section.visual_intent}",
+                    f"- Estimated duration: {section.estimated_duration_seconds}秒",
+                    "",
+                    "\n".join(section.lyrics),
+                    "",
+                ]
+            )
+    if design.mv_visual_plan:
+        lines.extend(
+            [
+                "## MV映像方針",
+                design.mv_visual_plan.concept,
+                "",
+                f"- Motifs: {', '.join(design.mv_visual_plan.visual_motifs)}",
+                f"- Color script: {'; '.join(design.mv_visual_plan.color_script)}",
+                f"- Pacing: {'; '.join(design.mv_visual_plan.pacing_notes)}",
+                "",
+            ]
+        )
     for character in design.characters:
         lines.extend(
             [

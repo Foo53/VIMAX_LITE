@@ -3,10 +3,10 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from vimax_lite.models import GeneratedImage, ProductionBrief, ProductionDesign, SunoMusicParams
+from vimax_lite.models import GeneratedImage, MVVisualPlan, ProductionBrief, ProductionDesign, SongSection, SunoMusicParams
 from vimax_lite.providers import LLMProvider, normalize_aspect_ratio
 from vimax_lite.rag import RAGStore
-from vimax_lite.schemas import CharacterList, ContinuityReport, PromptBundle, RevisionResult, SceneList, ScriptList, ShotList, SunoMusicParamsSchema
+from vimax_lite.schemas import CharacterList, ContinuityReport, MVVisualPlanSchema, PromptBundle, RevisionResult, SceneList, ScriptList, ShotList, SongSectionList, SunoMusicParamsSchema
 
 
 class Agent:
@@ -56,7 +56,7 @@ OUTPUT_MODE: {output_mode}
 class ScreenwriterAgent(Agent):
     name = "脚本エージェント"
 
-    def run(self, brief: ProductionBrief, source_script: str | None = None) -> ScriptList:
+    def run(self, brief: ProductionBrief, source_script: str | None = None, mv_context: str = "") -> ScriptList:
         mode_instruction = output_mode_instruction(brief.output_mode)
         prompt = f"""
 あなたは脚本エージェントです。
@@ -67,6 +67,9 @@ class ScreenwriterAgent(Agent):
 制作ブリーフ:
 {brief.model_dump_json(indent=2)}
 
+MV音楽・映像方針:
+{mv_context or "なし"}
+
 既存脚本:
 {source_script or "なし"}
 """
@@ -76,7 +79,7 @@ class ScreenwriterAgent(Agent):
 class CharacterAgent(Agent):
     name = "キャラクター設計エージェント"
 
-    def run(self, brief: ProductionBrief, script: ScriptList, rag: RAGStore) -> CharacterList:
+    def run(self, brief: ProductionBrief, script: ScriptList, rag: RAGStore, mv_context: str = "") -> CharacterList:
         context = rag.context_block(brief.logline, used_by=self.name)
         prompt = f"""
 あなたはキャラクター設計エージェントです。
@@ -90,6 +93,9 @@ RAG参照情報:
 制作ブリーフ:
 {brief.model_dump_json(indent=2)}
 
+MV音楽・映像方針:
+{mv_context or "なし"}
+
 脚本ビート:
 {script.model_dump_json(indent=2)}
 """
@@ -102,7 +108,7 @@ RAG参照情報:
 class ScenePlannerAgent(Agent):
     name = "シーン設計エージェント"
 
-    def run(self, brief: ProductionBrief, script: ScriptList, characters: CharacterList, rag: RAGStore) -> SceneList:
+    def run(self, brief: ProductionBrief, script: ScriptList, characters: CharacterList, rag: RAGStore, mv_context: str = "") -> SceneList:
         context = rag.context_block(brief.logline, used_by=self.name)
         prompt = f"""
 あなたはシーン設計エージェントです。
@@ -113,6 +119,9 @@ RAG参照情報:
 
 制作ブリーフ:
 {brief.model_dump_json(indent=2)}
+
+MV音楽・映像方針:
+{mv_context or "なし"}
 
 キャラクター:
 {characters.model_dump_json(indent=2)}
@@ -126,7 +135,7 @@ RAG参照情報:
 class ShotDirectorAgent(Agent):
     name = "ショット設計エージェント"
 
-    def run(self, brief: ProductionBrief, scenes: SceneList, characters: CharacterList, rag: RAGStore) -> ShotList:
+    def run(self, brief: ProductionBrief, scenes: SceneList, characters: CharacterList, rag: RAGStore, mv_context: str = "") -> ShotList:
         context = rag.context_block(" ".join(scene.summary for scene in scenes.items), used_by=self.name, limit=8)
         mode_instruction = output_mode_instruction(brief.output_mode)
         caption_instruction = ""
@@ -156,6 +165,9 @@ RAG参照情報:
 制作ブリーフ:
 {brief.model_dump_json(indent=2)}
 
+MV音楽・映像方針:
+{mv_context or "なし"}
+
 キャラクター:
 {characters.model_dump_json(indent=2)}
 
@@ -171,7 +183,7 @@ RAG参照情報:
 class PromptEngineerAgent(Agent):
     name = "プロンプト設計エージェント"
 
-    def run(self, brief: ProductionBrief, shots: ShotList, rag: RAGStore) -> PromptBundle:
+    def run(self, brief: ProductionBrief, shots: ShotList, rag: RAGStore, mv_context: str = "") -> PromptBundle:
         context = rag.context_block(" ".join(shot.description for shot in shots.items), used_by=self.name, limit=10)
         mode_instruction = output_mode_instruction(brief.output_mode)
         prompt = f"""
@@ -187,6 +199,9 @@ RAG参照情報:
 
 制作ブリーフ:
 {brief.model_dump_json(indent=2)}
+
+MV音楽・映像方針:
+{mv_context or "なし"}
 
 ショット:
 {shots.model_dump_json(indent=2)}
@@ -287,6 +302,46 @@ class MusicAgent(Agent):
         )
 
 
+class SongAnalysisAgent(Agent):
+    name = "楽曲構成分析エージェント"
+
+    def run(self, brief: ProductionBrief, suno_params: SunoMusicParams) -> list[SongSection]:
+        prompt = f"""
+あなたはMV制作のための楽曲構成分析エージェントです。
+Suno用の歌詞とstyleを読み、映像設計に使えるように曲をセクションへ分解してください。
+各セクションには、section_id、label、lyrics、mood、visual_intent、estimated_duration_seconds を入れてください。
+歌詞内の [Intro] [Verse] [Chorus] [Bridge] [Outro] [End] などのタグを尊重してください。
+
+制作ブリーフ:
+{brief.model_dump_json(indent=2)}
+
+Sunoパラメータ:
+{suno_params.model_dump_json(indent=2)}
+"""
+        return self.provider.generate_structured(prompt, SongSectionList).items
+
+
+class MVVisualPlannerAgent(Agent):
+    name = "MV映像方針エージェント"
+
+    def run(self, brief: ProductionBrief, suno_params: SunoMusicParams, song_sections: list[SongSection]) -> MVVisualPlan:
+        prompt = f"""
+あなたはミュージックビデオの映像方針を作るエージェントです。
+入力されたSuno歌詞、style、曲構成に基づき、以降の脚本・キャラクター・シーン・ショット・画像プロンプト生成が曲に準拠できる映像方針を作ってください。
+単なるアイデア映像ではなく、曲のセクション、歌詞の感情、styleの音楽ジャンル・テンポ・楽器感に映像が同期するようにしてください。
+
+制作ブリーフ:
+{brief.model_dump_json(indent=2)}
+
+Sunoパラメータ:
+{suno_params.model_dump_json(indent=2)}
+
+曲構成:
+{[section.model_dump() for section in song_sections]}
+"""
+        return self.provider.generate_structured(prompt, MVVisualPlanSchema)
+
+
 class ImageGenerationAgent(Agent):
     name = "画像生成エージェント"
 
@@ -344,6 +399,26 @@ def _narration_style_guide(narration_style: str) -> str:
         "none": "",
     }
     return guides.get(narration_style, "絵本のように、やさしい語り口で情景と感情を伝える短い文にしてください。")
+
+
+def build_mv_context(
+    *,
+    suno_params: SunoMusicParams | None,
+    song_sections: list[SongSection] | None = None,
+    mv_visual_plan: MVVisualPlan | None = None,
+) -> str:
+    if not suno_params:
+        return ""
+    parts = [
+        "この制作はMVモードです。以降の映像設計は、入力アイデアだけでなく、生成済みまたは編集済みのSuno歌詞・style・曲構成に準拠してください。",
+        "Sunoパラメータ:",
+        suno_params.model_dump_json(indent=2),
+    ]
+    if song_sections:
+        parts.extend(["曲構成:", "\n".join(section.model_dump_json() for section in song_sections)])
+    if mv_visual_plan:
+        parts.extend(["MV映像方針:", mv_visual_plan.model_dump_json(indent=2)])
+    return "\n".join(parts)
 
 
 def output_mode_instruction(output_mode: str) -> str:

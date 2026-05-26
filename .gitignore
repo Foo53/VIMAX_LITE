@@ -12,3 +12,4 @@ tmp_cli_check/
 *.egg-info/
 remotion/node_modules/
 remotion/out/
+work/

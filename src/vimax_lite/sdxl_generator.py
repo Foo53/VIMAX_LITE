@@ -64,7 +64,12 @@ def _get_pipeline(*, with_reference: bool) -> Any:
                 cache_dir=str(MODEL_CACHE_DIR),
             )
             if cuda:
-                _pipeline.enable_model_cpu_offload()
+                _pipeline.to("cuda")
+                _pipeline.enable_vae_slicing()
+                try:
+                    _pipeline.enable_xformers_memory_efficient_attention()
+                except ImportError:
+                    _pipeline.enable_attention_slicing()
             else:
                 _pipeline.to("cpu")
         if with_reference and not _ip_adapter_loaded:

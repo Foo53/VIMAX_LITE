@@ -1,0 +1,10 @@
+{
+  "id": "character_char_robot_front",
+  "kind": "reference",
+  "model": "sdxl-local",
+  "prompt": "single character reference image, front view, full body, facing camera, Milo, the main character, a lonely delivery robot, a small white delivery robot with a square screen face, rounded cargo shell, compact wheels, and a glowing blue status light, a yellow rain poncho clipped to the cargo shell, wet from the rain, careful, observant, quietly brave, and curious, always show the glowing blue status light; keep the yellow rain poncho wet and attached to the cargo shell, clean neutral studio background, centered composition, clear silhouette, consistent materials and colors, production concept art, highly detailed",
+  "negative_prompt": "multiple characters, duplicate subject, multiple views, turnaround sheet, model sheet, contact sheet, grid, panels, visible text, caption, logo, watermark, distorted proportions, low quality",
+  "reference_paths": [],
+  "width": 1024,
+  "height": 1024
+}
